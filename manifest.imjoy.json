@@ -1,0 +1,34 @@
+{
+ "name": "ImJoy Repository",
+ "description": "ImJoy plugin repository.",
+ "uri_root": "",
+ "version": "0.2.0",
+ "plugins": [
+  {
+   "name": "Skin-Lesion-Analyzer",
+   "type": "window",
+   "tags": [],
+   "ui": "A pretrained MobileNet image classifier for images of skin lesion built with Tensorflow.js",
+   "version": "0.1.0",
+   "api_version": "0.1.2",
+   "description": "A pretrained MobileNet image classifier built with Tensorflow.js",
+   "icon": "extension",
+   "inputs": null,
+   "outputs": null,
+   "env": "",
+   "requirements": [
+    "https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@0.14.1",
+    "https://unpkg.com/spectre.css/dist/spectre.min.css",
+    "https://unpkg.com/spectre.css/dist/spectre-exp.min.css",
+    "https://unpkg.com/spectre.css/dist/spectre-icons.min.css"
+   ],
+   "dependencies": [],
+   "defaults": {
+    "w": 15,
+    "h": 20
+   },
+   "uri": "imjoy-plugins/Skin-Lesion-Analyzer.imjoy.html"
+  }
+ ],
+ "collections": []
+}

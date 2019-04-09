@@ -1,0 +1,222 @@
+﻿<docs lang="markdown">
+This plugin allows to classify 7 types of skin lesions as described in the publication 
+[The HAM10000 Dataset: A Large Collection of Multi-Source Dermatoscopic Images of Common Pigmented Skin Lesions](https://arxiv.org/abs/1803.10417)
+
+Images are analyze with a pretrained model built with Tensorflow.js.
+
+When loading the plugin, a default image is provided. You can also use your own images: on **computer** you can upload an image, on a **smartphone** you can 
+snap an image. 
+
+# Source code
+This plugin is ported from: [Skin Lesion Analyzer Web App built using Tensorflow.js](https://github.com/vbookshelf/Skin-Lesion-Analyzer).
+
+The entire process of model building and the training process is described in this Kaggle kernel:
+https://www.kaggle.com/vbookshelf/skin-lesion-analyzer-tensorflow-js-web-app
+
+</docs>
+
+<config lang="json">
+{
+  "name": "Skin-Lesion-Analyzer",
+  "type": "window",
+  "tags": [],
+  "ui": "A pretrained MobileNet image classifier for images of skin lesion built with Tensorflow.js",
+  "version": "0.1.0",
+  "api_version": "0.1.2",
+  "description": "A pretrained MobileNet image classifier built with Tensorflow.js",
+  "icon": "extension",
+  "inputs": null,
+  "outputs": null,
+  "env": "",
+  "requirements": [
+    "https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@0.14.1",
+    "https://unpkg.com/spectre.css/dist/spectre.min.css",
+    "https://unpkg.com/spectre.css/dist/spectre-exp.min.css",
+    "https://unpkg.com/spectre.css/dist/spectre-icons.min.css"
+  ],
+  "dependencies": [],
+  "defaults": {"w": 15, "h": 20}
+}
+</config>
+
+<script lang="javascript">
+
+SKIN_CLASSES = {
+  0: 'akiec, Actinic Keratoses (Solar Keratoses) or intraepithelial Carcinoma (Bowen’s disease)',
+  1: 'bcc, Basal Cell Carcinoma',
+  2: 'bkl, Benign Keratosis',
+  3: 'df, Dermatofibroma',
+  4: 'mel, Melanoma',
+  5: 'nv, Melanocytic Nevi',
+  6: 'vasc, Vascular skin lesion'
+};
+
+class ImJoyPlugin {
+  async setup() {
+
+    // bind predict() to the button
+    const predictBtn = document.getElementById('predict-btn');
+    predictBtn.onclick = ()=>{
+      this.predict()
+    }
+
+    // Display image when a file is selected.
+    const fileInput = document.getElementById("file-input");
+    const canvas = document.getElementById("input-canvas");
+    const drawImage = (url, callback)=>{
+        var img = new Image()
+        img.crossOrigin = "anonymous"
+        img.onload = function(){
+            const ctx = canvas.getContext("2d");
+            canvas.width = Math.min(this.width, 512);
+            canvas.height= Math.min(this.height, parseInt(512*this.height/this.width), 1024);
+            // draw the img into canvas
+            ctx.drawImage(this, 0, 0, canvas.width, canvas.height);
+            if(callback) callback();
+        }
+        img.src = url;
+    }
+
+    //load a preset image
+    drawImage('https://static.imjoy.io/img/skin-lesion-sample.jpg')
+    
+    const readImageFile = ()=>{
+        return new Promise((resolve, reject)=>{
+            const U = window.URL || window.webkitURL;
+            // this works for safari
+            if(U.createObjectURL){
+                drawImage(U.createObjectURL(fileInput.files[0]), resolve)
+            }
+            // fallback
+            else{
+                var fr = new FileReader();
+                // when image is loaded, set the src of the image where you want to display it
+                fr.onload = function(e) {
+                    drawImage(e.target.result, resolve)
+                };
+                fr.onerror = reject
+                // fill fr with image data
+                fr.readAsDataURL(fileInput.files[0]);
+            }
+        })
+    }
+    
+    // If user selected a new file or take a new photo, load it and do prediction.
+    fileInput.addEventListener("change", ()=>{
+        readImageFile().then(()=>{
+            this.predict();
+        })
+    }, true);
+
+    // Load the model.
+    const statusElement = document.getElementById("status");
+    statusElement.innerHTML = 'Loading pretrained model...';
+    this.model = await tf.loadModel('https://raw.githubusercontent.com/oeway/Anet-Model-Zoo/master/5_skin-lesion-mobilenet/model.json');
+
+    document.getElementById("hero_title").innerHTML = 'Model loaded'
+    statusElement.innerHTML = '1. Open image (.png/.jpg) or use pre-loaded image. <br> 2. Click `Predict` for image recognition!';
+    
+    // Display the predict button and file selection
+    predictBtn.style.display = "inline";
+    fileInput.style.display = "inline";
+  }
+
+  async predict(){    
+
+    const canvas = document.getElementById('input-canvas');
+
+	// Pre-process the image
+	let tensor = tf.fromPixels(canvas)
+	.resizeNearestNeighbor([224,224])
+	.toFloat();
+	
+	
+	let offset = tf.scalar(127.5);
+	
+	tensor = tensor.sub(offset)
+	.div(offset)
+	.expandDims();
+	
+	
+	// Pass the tensor to the model and call predict on it.
+	// Predict returns a tensor.
+	// data() loads the values of the output tensor and returns
+	// a promise of a typed array when the computation is complete.
+	// Notice the await and async keywords are used together.
+	let probs = await this.model.predict(tensor).data();
+	let predictions = Array.from(probs)
+		.map(function (p, i) { // this is Array.map
+			return {
+				probability: p,
+				className: SKIN_CLASSES[i] // we are selecting the value from the obj
+			};
+				
+			
+		}).sort(function (a, b) {
+			return b.probability - a.probability;
+				
+		}).slice(0, 3);
+
+    // Output result in console
+    console.log('Predictions', predictions);
+    
+    // Output results in interface
+    document.getElementById("hero_title").innerHTML = 'Predictions: '
+
+    const result_string_html = `Top-1: ${predictions[0].className} (${Math.round(predictions[0].probability*100)}%) <br> Top-2: ${predictions[1].className} (${Math.round(predictions[1].probability*100)}%)`;
+    document.getElementById("status").innerHTML = result_string_html
+
+    // Output results as ImJoy alert
+    const result_string =  `Predictions: Top-1 ${predictions[0].className} (${Math.round(predictions[0].probability*100)}%); Top-2 ${predictions[1].className} (${Math.round(predictions[1].probability*100)}%);`;
+    api.alert(result_string)
+    
+  }
+
+  run(my) {
+
+  }
+}
+
+api.export(new ImJoyPlugin())
+</script>
+
+<window lang="html">
+  <div>
+    <!–– Header bar ––>
+    <div class="hero hero-sm bg-secondary">
+        <div class="mx-2">
+            <h3 id="hero_title"></h3>
+            <p id="status"></p>
+        </div>
+    </div>
+
+   <!–– Buttons ––>
+   <div class="p-1">
+        <input  style="display: none;" id="file-input" accept="image/*" capture="camera" type="file"/>
+        <br>
+        <button class="btn btn-primary" style="display: none;" id="predict-btn">Predict</button>
+    </div>
+
+    <!–– canvas ––>
+    <div class="p-1">
+        <canvas id="input-canvas" style="width: 100%; object-fit: cover;"></canvas>
+    </div>
+  </div>
+</window>
+
+<style lang="css">
+
+.p-1 {
+    text-align: center;
+}
+
+.p-1 input{
+    width:90%;
+    margin:10px;
+}
+
+.p-1 button{
+    width:90%;
+    margin:10px;
+}
+</style>
