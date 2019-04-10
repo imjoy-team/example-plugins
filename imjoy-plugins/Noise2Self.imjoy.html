@@ -1,0 +1,146 @@
+﻿<docs lang="markdown">
+
+## An ImJoy plugin using Noise2Self method for denosing.
+
+This demo is ported from: https://github.com/czbiohub/noise2self/blob/master/notebooks/Intro%20to%20Neural%20Nets.ipynb
+
+## About Noise2Self
+
+Paper: https://arxiv.org/abs/1901.11365
+Authors: Joshua Batson, Loic Royer
+
+</docs>
+
+<config lang="json">
+{
+  "name": "Noise2Self",
+  "type": "native-python",
+  "version": "0.1.8",
+  "tags": ["CPU", "GPU"],
+  "api_version": "0.1.2",
+  "description": "A demo plugin for Noise2Self (Blind Denoising by Self-Supervision)",
+  "ui": "training steps:{id:'steps', type:'number', min:1, placeholder:1000}",
+  "inputs": null,
+  "outputs": null,
+  "flags": [],
+  "icon": "extension",
+  "env": {
+    "CPU": "conda create -n noise2self-cpu python=3.6.2",
+    "GPU": "conda create -n noise2self-gpu python=3.6.2"
+  },
+  "requirements": {
+    "CPU": ["repo:https://github.com/czbiohub/noise2self.git", "conda: -c pytorch six pillow numpy scipy pytorch=1.0 torchvision"],
+    "GPU": ["repo:https://github.com/czbiohub/noise2self.git", "conda: -c pytorch six pillow numpy scipy cudatoolkit=9.0 pytorch=1.0 torchvision"]
+  },
+  "dependencies": ["oeway/ImJoy-Plugins:Im2Im-Dashboard"]
+}
+</config>
+
+<script lang="python">
+import sys
+sys.path.append("./noise2self")
+import asyncio
+import base64
+from io import BytesIO
+from PIL import Image
+import torch
+from torchvision.datasets import MNIST
+from torchvision import transforms
+from torch.utils.data import Dataset
+
+gpu_available = torch.cuda.is_available()
+
+if api.TAG == 'GPU' and gpu_available:
+    REPORT_INTERVAL = 5
+else:
+    REPORT_INTERVAL = 1
+
+mnist_train = MNIST('../data/MNIST', download = True,
+                    transform = transforms.Compose([
+                        transforms.ToTensor(),
+                    ]), train = True)
+mnist_test = MNIST('../data/MNIST', download = True,
+                    transform = transforms.Compose([
+                        transforms.ToTensor(),
+                    ]), train = False)
+from torch import randn
+def add_noise(img):
+    return img + randn(img.size())*0.4
+class SyntheticNoiseDataset(Dataset):
+    def __init__(self, data, mode='train'):
+        self.mode = mode
+        self.data = data
+    def __len__(self):
+        return len(self.data)
+    def __getitem__(self, index):
+        img = self.data[index][0]
+        return add_noise(img), img
+noisy_mnist_train = SyntheticNoiseDataset(mnist_train, 'train')
+noisy_mnist_test = SyntheticNoiseDataset(mnist_test, 'test')
+noisy, clean = noisy_mnist_train[0]
+from mask import Masker
+masker = Masker(width = 4, mode='interpolate')
+net_input, mask = masker.mask(noisy.unsqueeze(0), 0)
+from models.babyunet import BabyUnet
+model = BabyUnet()
+
+if api.TAG == 'GPU' and gpu_available:
+    model = model.cuda()
+from torch.nn import MSELoss
+from torch.optim import Adam
+from torch.utils.data import DataLoader
+loss_function = MSELoss()
+optimizer = Adam(model.parameters(), lr=0.001)
+class ImJoyPlugin():
+    def setup(self):
+        print('setup in python')
+
+    async def plot_tensors(self, tensor_list, label, titles=None):
+        image_list = [tensor.detach().cpu().numpy().reshape(tensor.shape[-2], tensor.shape[-1]) for tensor in tensor_list]
+        displays = {}
+        titles = titles or [ 'Tensor '+str(i) for i in range(len(image_list))]
+        for i in range(len(image_list)):
+            im = image_list[i]
+            min = im.min()
+            im = Image.fromarray(((im-min)/(im.max()-min)*255).astype('uint8'))
+            buffered = BytesIO()
+            im.save(buffered, format="JPEG")
+            img_str = base64.b64encode(buffered.getvalue()).decode('ascii')
+            imgurl = 'data:image/png;base64,' + img_str
+            displays[titles[i]] = imgurl
+        await self.dash.appendDisplay(label, displays)
+
+    async def run(self, my):
+        steps =  my.config.steps
+        if api.TAG == 'GPU' and not gpu_available:
+            api.alert('Running with CPU')
+
+        api.log('Starting Noise2Self training for '+str(steps) + 'steps.')
+        data_loader = DataLoader(noisy_mnist_train, batch_size=32, shuffle=True)
+
+        self.dash = await api.createWindow(type="Im2Im-Dashboard", name="Noise2Self Training", w=25, h=10, data={'display_mode': 'all', 'metrics': ["loss"], 'callbacks': ['onStep']})
+
+        for i, batch in enumerate(data_loader):
+            noisy_images, clean_images = batch
+            if api.TAG == 'GPU' and gpu_available:
+                noisy_images, clean_images = noisy_images.cuda(), clean_images.cuda()
+            net_input, mask = masker.mask(noisy_images, i)
+
+            net_output = model(net_input)
+            loss = loss_function(net_output*mask, noisy_images*mask)
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+            if i % REPORT_INTERVAL  == 0:
+                info =  "Loss (" + str(i) + "): " + str(loss.item())
+                api.log(info)
+                api.showStatus(info)
+                await self.dash.updateCallback('onStep', i, {'loss': float(str(loss.item()))})
+                label = 'Step ' + str(i)
+                invariant_output = masker.infer_full_image(noisy_images, model)
+                await self.plot_tensors([noisy_images[0], net_output[0], clean_images[0], invariant_output[0]], label,
+                            ["Noisy Image", "Single Pass Inference", "Ground Truth", "J-invariant Inference"])
+            if i == steps:
+                break
+api.export(ImJoyPlugin())
+</script>

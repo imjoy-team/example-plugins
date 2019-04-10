@@ -1,0 +1,822 @@
+﻿<docs>
+
+# ShuffleNetV2 for HPA
+
+https://github.com/CellProfiling/HPA-Special-Prize
+
+Class Activation Map: https://arxiv.org/pdf/1512.04150.pdf
+
+</docs>
+
+<config lang="json">
+{
+  "name": "HPA-Classification",
+  "type": "window",
+  "tags": [],
+  "ui": [{
+    "model": {
+        "id": "model",
+        "type": "choose",
+        "options": ["ShuffleNet-V2"],
+        "placeholder": "ShuffleNet-V2"
+    }
+  }],
+  "version": "0.1.14",
+  "api_version": "0.1.2",
+  "url": "",
+  "description": "ShuffleNetV2 for HPA.",
+  "icon": "extension",
+  "inputs": null,
+  "outputs": null,
+  "env": null,
+  "requirements": [
+        "https://cdn.jsdelivr.net/npm/apexcharts",
+        "https://cdn.jsdelivr.net/npm/@tensorflow/tfjs",
+        "https://cdn.jsdelivr.net/npm/simpleheat@0.4.0/simpleheat.min.js",
+        "https://cdn.jsdelivr.net/gh/photopea/UTIF.js@4f1b10cb09e244cfd4f9631245d2231537148be7/UTIF.js"
+    ],
+  "dependencies": [],
+  "defaults": {"w": 60, "h": 20}
+}
+</config>
+
+
+<script lang="javascript">
+const _available_models = {
+  'ShuffleNet-V2': {url: 'https://raw.githubusercontent.com/oeway/Anet-Model-Zoo/master/4_hpa_shufflenet_v2/model.json', name: 'ShuffleNet-V2', base_size: 512, type:'shufflenet', inputs: [{name: 'input', shape: [512, 512, 1]}], outputs: [{name: 'output', shape: [28]}]},
+}
+const CHANNELS = ["Microtubules", "Antibody", "Nucleus"]
+const CHANNEL_COLORS = {"Microtubules": "red", "Antibody": "green", "Nucleus": "blue"}
+const LABLES = {
+0: "Nucleoplasm",
+1: "Nuclear membrane",  
+2: "Nucleoli",  
+3: "Nucleoli fibrillar center",  
+4: "Nuclear speckles",  
+5: "Nuclear bodies", 
+6: "Endoplasmic reticulum",  
+7: "Golgi apparatus",  
+8: "Peroxisomes",  
+9: "Endosomes",  
+10: "Lysosomes",  
+11: "Intermediate filaments",
+12: "Actin filaments",  
+13: "Focal adhesion sites",  
+14: "Microtubules",
+15: "Microtubule ends",
+16: "Cytokinetic bridge",
+17: "Mitotic spindle",
+18: "Microtubule organizing center",
+19: "Centrosome",
+20: "Lipid droplets",
+21: "Plasma membrane",
+22: "Cell junctions",
+23: "Mitochondria",
+24: "Aggresome",  
+25: "Cytosol",
+26: "Cytoplasmic bodies",
+27: "Rods & rings" 
+}
+class ImJoyPlugin {
+  async setup() {
+    this.statusElement = document.getElementById("tf-label");
+    document.getElementById('bar-container').style.display = "none";
+    // api.register({name:'train', ui: 'train A net', run: this.train})
+    // api.register({name:'predict', ui: 'predict with trained A net'})
+    class Lambda extends tf.layers.Layer {
+        constructor(config) {
+            super(config);
+            if(config.name.endsWith('sp0_slice')){
+                this.mode= 'slice0'
+            }
+            else if(config.name.endsWith('sp1_slice')){
+                this.mode = 'slice1'
+            }
+            else if(config.name.endsWith('channel_shuffle')){
+                this.mode = 'shuffle'
+            }
+        }
+        
+        static get className() {
+            return 'Lambda';
+        }
+        computeOutputShape(inputShape){
+            if(this.mode === 'slice0'){
+                return [inputShape[0], inputShape[1], inputShape[2], inputShape[3]/2]
+            }
+            else if(this.mode === 'slice1'){
+                return [inputShape[0], inputShape[1], inputShape[2], inputShape[3]/2]
+            }
+            else if(this.mode === 'shuffle'){
+                return inputShape
+            }
+        }
+        call(input) {
+            let x = input[0]
+            if(this.mode === 'slice0'){
+                return tf.tidy(() => {
+                    return x.slice([0, 0, 0, 0], [x.shape[0], x.shape[1], x.shape[2], x.shape[3]/2])
+                });
+            }
+            else if(this.mode === 'slice1'){
+                return tf.tidy(() => {
+                    return x.slice([0, 0, 0, x.shape[3]/2], [x.shape[0], x.shape[1], x.shape[2], x.shape[3]/2])
+                });
+            }
+            else if(this.mode === 'shuffle'){
+                return tf.tidy(() => {
+                    const [batch, height, width, channels] = x.shape
+                    const channels_per_split = channels / 2
+                    x = x.reshape([-1, height, width, 2, channels_per_split])
+                    x = x.transpose([0,1,2,4,3])
+                    x = x.reshape([-1, height, width, channels])
+                    return x
+                });
+            }
+            
+        }
+    }
+    /**
+    * Regsiter the custom layer, so TensorFlow.js knows what class constructor
+    * to call when deserializing an saved instance of the custom layer.
+    */
+    tf.serialization.registerClass(Lambda);
+  }
+    async showHeatMap(pixels){
+        // minimal heatmap instance configuration
+        var heatmapInstance = h337.create({
+        // only container is required, the rest will be defaults
+        container: document.getElementById('heatmap')
+        });
+        // now generate some random data
+        var points = [];
+        var max = 0;
+        var width = 840;
+        var height = 400;
+        var len = 200;
+        while (len--) {
+        var val = Math.floor(Math.random()*100);
+        max = Math.max(max, val);
+        var point = {
+            x: Math.floor(Math.random()*width),
+            y: Math.floor(Math.random()*height),
+            value: val
+        };
+        points.push(point);
+        }
+        // heatmap data format
+        var data = { 
+        max: max, 
+        data: points 
+        };
+        // if you have a set of datapoints always use setData instead of addData
+        // for data initialization
+        heatmapInstance.setData(data);
+    }
+    async loadData(urls) {
+        const tensors = await Promise.all(urls.map(url => this._url2tensor(url)))
+        const rgbImage = tf.stack(tensors, 2)
+        const loadedImage = tf.image.resizeBilinear(rgbImage, [512, 512]) //cropImage(rgbImage, [512, 512])
+        this.loadedImage = loadedImage
+        var canvas = document.createElement('canvas')
+        canvas.width = loadedImage.shape[0]
+        canvas.height = loadedImage.shape[1]
+        canvas.style["margin"] = "1px"
+        const bytes = await tf.browser.toPixels(loadedImage.asType('int32'))
+        const imageData = new ImageData(bytes, canvas.width, canvas.height);
+        const c = canvas.getContext("2d");
+        c.putImageData(imageData, 0, 0);
+        const selected_canvas = document.createElement('canvas')
+        selected_canvas.width = canvas.width
+        selected_canvas.height = canvas.height
+        selected_canvas.style["margin"] = "1px"
+        selected_canvas.style["width"] = canvas.width + "px"
+        selected_canvas.style["height"] = canvas.height + "px"
+        const scontainer = document.createElement('div')
+        const plable = document.createElement('p')
+        plable.style["margin-bottom"] = "1px"
+        scontainer.appendChild(plable)
+        scontainer.appendChild(selected_canvas)
+        
+        const container = document.createElement('div')
+        const p = document.createElement('p')
+        p.innerHTML = 'Input(RGB)'
+        p.style["margin-bottom"] = "1px"
+        container.appendChild(p)
+        container.appendChild(canvas)
+        
+        
+        this.show_selected_canvas = (image_tensor, label, is_heatmap)=> {
+            if(is_heatmap){
+                const d = image_tensor.dataSync();
+                const points = []
+                const x_ratio = selected_canvas.width/image_tensor.shape[0]
+                const y_ratio = selected_canvas.height/image_tensor.shape[1]
+                
+                for(let x=0;x<image_tensor.shape[0];x++){
+                    for(let y=0;y<image_tensor.shape[1];y++){
+                        const v = d[y*image_tensor.shape[0]+x]
+                        points.push([parseInt(x*x_ratio), parseInt(y*y_ratio), v])
+                    }
+                }
+                const heat = simpleheat(selected_canvas);
+                heat.data(points)
+                heat.radius(1.5*x_ratio, 1.0*x_ratio);
+                heat.max(image_tensor.max().dataSync()[0])
+                heat.draw()
+            }
+            else{
+                tf.browser.toPixels(image_tensor, selected_canvas)
+            }
+            plable.innerHTML = label || 'Selected'
+        }
+        const btnContainer = document.getElementById('select-buttons')
+        btnContainer.innerHTML = ''
+        this.add_select_button = (image_tensor, label, color)=>{
+            color = color || "#448aff";
+            const btn = document.createElement('button')
+            
+
+            btn.innerHTML = label
+            btn.style.margin= "1px"
+            btn.style["background-color"] = color
+            btn.className = "small-button"
+            btn.onclick = ()=>{
+                this.show_selected_canvas(image_tensor, label)
+            } 
+            btnContainer.appendChild(btn)
+        }
+        //show only green channel
+        this.show_selected_canvas(loadedImage.unstack(2)[1].asType('int32'), CHANNELS[1])
+        // btnContainer.innerHTML = ''
+        for(let i=0;i<CHANNELS.length;i++){
+            this.add_select_button(loadedImage.unstack(2)[i].asType('int32'), CHANNELS[i], CHANNEL_COLORS[CHANNELS[i]])
+        }
+        const radius = 15;
+        function drawCircle(mouseX, mouseY){
+            // Clear the background
+            //c.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Establish the circle path
+            c.beginPath();
+            c.arc(mouseX, mouseY, radius, 0 , 2 * Math.PI, false);
+            
+            // Fill the circle
+            c.fillStyle = "rgba(255, 255, 255, 0)";
+            c.fill();
+            
+            // Outline (stroke) the circle
+            c.lineWidth = 3;
+            c.strokeStyle = 'white';
+            c.stroke();
+        }
+        // Redraw the circle every time the mouse moves
+        selected_canvas.addEventListener('mousemove',function(e){
+            c.putImageData(imageData, 0, 0);
+            const rect = selected_canvas.getBoundingClientRect();
+            drawCircle(e.clientX- rect.left, e.clientY- rect.top);
+        });
+        // Clear the canvas when the mouse leaves the canvas region
+        selected_canvas.addEventListener('mouseout',function(e){
+            //c.clearRect(0, 0, canvas.width, canvas.height);
+            c.putImageData(imageData, 0, 0);
+        });
+        const drawArea = document.getElementById('tf-surface')
+        drawArea.innerHTML = ''
+        drawArea.appendChild(scontainer);
+        drawArea.appendChild(container);
+        return loadedImage
+    }
+    async predictImg(img) {
+        this.statusElement.innerHTML = "Running ShuffleNetV2 in your browser..."
+        const batchedImage = img.expandDims(0).toFloat();
+        const result = this._model.predict(batchedImage).dataSync()
+        const probs = Array.prototype.slice.call(result)
+        const values = []
+        const keys = []
+        for(let i in Object.keys(LABLES)){
+            keys.push(LABLES[i])
+            values.push(probs[i])
+        }
+        this.sorted_labels = keys.sort(function (a, b) { return values[a] < values[b] ? -1 : values[a] > values[b] ? 1 : 0; });
+        return this.showResult(probs, 0.001)
+    }
+    async get_activation(img, weights) {
+        const batchedImage = img.expandDims(0).toFloat();
+        const activation_map = this.activation_model.predict(batchedImage)
+        assert(activation_map.shape[0] === 1)
+        let maps = tf.dot(activation_map.reshape([-1, activation_map.shape[3]]), weights)
+        //this.showResult( Array.prototype.slice.call(result))
+        maps = maps.reshape([activation_map.shape[1], activation_map.shape[2], weights.shape[1]])
+        // const mi = maps.min()
+        maps = maps.unstack(2)
+        const norm_maps = {}
+        for(let i=0;i<maps.length;i++){
+            const ma = maps[i].max()
+            norm_maps[LABLES[i]] = maps[i].clipByValue(0, ma.dataSync()).div(ma).mul(255).asType('int32')
+        }
+        return norm_maps
+    }
+    _url2tensor(url)
+    {
+        return new Promise((resolve, reject) => {
+            const img = document.createElement('img');
+            img.setAttribute('crossorigin', 'anonymous');
+            img.onload = () =>
+            {   
+                const t = tf.browser.fromPixels(img, 3)
+                if(url.includes('_red.') && t.shape[2] === 3){
+                    const gray_tensor = t.unstack(2)[0];
+                    resolve(gray_tensor)
+                }
+                else if(url.includes('_green.') && t.shape[2] === 3){
+                    const gray_tensor =t.unstack(2)[1]
+                    resolve(gray_tensor)
+                }
+                else if(url.includes('_blue.') && t.shape[2] === 3){
+                    const gray_tensor = t.unstack(2)[2]
+                    resolve(gray_tensor)
+                }
+                else{
+                    const gray_tensor = t.mean(2);
+                    resolve(gray_tensor)
+                }
+            };
+            img.src = url
+        })
+    }
+    async loadModel(name) {
+        try {
+            const url = _available_models[name].url
+            api.log('Tensorflow.js backend:' + tf.getBackend())
+            api.log('loading model: ' + url)
+            // Load the model.
+            
+            this.statusElement.innerHTML = 'Loading pretrained model...';
+            console.time('load model');
+            this._model = await tf.loadLayersModel(url);
+            this._model.summary()
+            console.timeEnd('load model');
+            api.log('loaded.')
+            this.statusElement.innerHTML = 'ShuffleNetV2 is ready for prediction';
+            api.showStatus('ShuffleNetV2 is ready for prediction')
+            this.url = url
+            this.loaded = true
+            return this._model
+        } catch (e) {
+            api.error('unable to load model from: ', url, 'error:', e)
+            throw e
+        }
+    }
+    async loadImage(image_id){
+        if(!image_id.includes('/')){
+            const s = image_id.split('_')
+            image_id = s[0] + '/' + s[1] + '_' + s[2] + '_' + s[3]
+        }
+        //const urls = ['https://static.imjoy.io/img/b478cc78-bad4-11e8-b2b8-ac1f6b6435d0_red.png',
+        //              'https://static.imjoy.io/img/b478cc78-bad4-11e8-b2b8-ac1f6b6435d0_green.png',
+        //              'https://static.imjoy.io/img/b478cc78-bad4-11e8-b2b8-ac1f6b6435d0_blue.png'];
+        //const urls = ['https://static.imjoy.io/img/57639_1283_B2_10_red.jpg',
+        //              'https://static.imjoy.io/img/57639_1283_B2_10_green.jpg',
+        //              'https://static.imjoy.io/img/57639_1283_B2_10_blue.jpg'];
+        const urls = ['https://www.proteinatlas.org/images/'+image_id+'_red.jpg',
+                     'https://www.proteinatlas.org/images/'+image_id+'_green.jpg',
+                     'https://www.proteinatlas.org/images/'+image_id+'_blue.jpg']
+        console.time('load data');
+        const img = await this.loadData(urls)
+        this.currentImage = img
+        console.timeEnd('load data');
+    }
+    async predict(image_id){
+        
+        this.loadImage(image_id)
+        console.time('predict');
+        const [predictions, labels, values] = await this.predictImg(this.currentImage)
+        console.timeEnd('predict');
+        this.activation_maps = await this.get_activation(this.currentImage, this.class_weights)
+        console.log('activation maps: ', this.activation_maps)
+    }
+    async run(my) {
+        const model_name = (my.config&& my.config.model) || 'ShuffleNet-V2';
+        if(my.data.id && my.data.id.split('_').length>2){
+            const image_id = my.data.id || '19661/221_G2_1'
+            this.loadImage(image_id)
+        }
+        else{
+            this.loadImage('19661/221_G2_1')
+        }
+        
+        const btn = document.getElementById('predict-btn');
+        btn.onclick = async ()=>{
+            console.time('predict');
+            const [predictions, labels, values] = await this.predictImg(this.currentImage)
+            console.timeEnd('predict');
+            this.activation_maps = await this.get_activation(this.currentImage, this.class_weights)
+            //for(let i=0;i<this.sorted_labels.length;i++){
+            //    this.add_select_button(this.activation_maps[this.sorted_labels[i]], this.sorted_labels[i])
+            //}
+            console.log('activation maps: ', this.activation_maps)
+        }
+        btn.style.display = "none";
+        await this.loadModel(model_name)
+        btn.style.display = "inline-block";
+        
+        const inputLayer = this._model.getLayer('shufflenet').getLayer("input_2")
+        const convLayer = this._model.getLayer('shufflenet').getLayer("onv5_out_1x1")
+        const lastLayer = this._model.getLayer('dense_1')
+        this.class_weights = lastLayer.getWeights()[0]
+        // Create the model with CAM.
+        this.activation_model = tf.model({
+            inputs: inputLayer.input,
+            outputs: [convLayer.output]
+        });
+    }
+    showResult(data, threshold){
+        const labels = [];
+        const predictions = [];
+        const values = []
+        threshold = threshold || 0
+        for(let i=0;i<28;i++){
+            if(data[i]>0.5){
+                predictions.push(LABLES[i])
+            }
+        
+            if(data[i]>threshold){
+                labels.push(LABLES[i])
+                values.push(data[i])
+            }
+        }
+        this.statusElement.innerHTML = 'Prediction: ' + predictions.join(", ")
+        api.showStatus(this.statusElement.innerHTML)
+        document.getElementById('bar-container').style.display = "block";
+        
+        const showCAM = (event, chartContext, config)=>{
+            var label = labels[config.dataPointIndex];
+            var prob = values[config.dataPointIndex];
+            console.log(label, prob);
+            if(this.activation_maps){
+                this.show_selected_canvas(this.activation_maps[label], 'Class Activation: '+label, true)
+            }
+        }
+        var options = {
+            chart: {
+                height: 350,
+                type: 'bar',
+                events: {
+                    dataPointSelection: showCAM,
+                    dataPointMouseEnter: showCAM
+                }
+            },
+            plotOptions: {
+                bar: {
+                    horizontal: true,
+                }
+            },
+            dataLabels: {
+                enabled: false
+            },
+            series: [{
+                name: 'Probability',
+                data: values
+            }],
+            xaxis: {
+                categories: labels,
+            }
+        }
+       document.querySelector("#tf-bar").innerHTML='';
+       var chart = new ApexCharts(
+            document.querySelector("#tf-bar"),
+            options
+        );
+        chart.render();
+        
+        
+        return [predictions, labels, values]
+    }
+}
+function assert(condition, message) {
+    if (!condition) {
+        message = message || "Assertion failed";
+        if (typeof Error !== "undefined") {
+            throw new Error(message);
+        }
+        throw message; // Fallback
+    }
+}
+function matchRuleShort(str, rule) {
+  return new RegExp("^" + rule.split("*").join(".*") + "$").test(str);
+}
+function baseCropImage(img, base) {
+  assert(img.shape.length == 3)
+  const s0 = Math.floor(img.shape[0]/base)*base
+  const s1 = Math.floor(img.shape[1]/base)*base
+  if(s0 == img.shape[0] && s1 == img.shape[1]){
+    return img
+  }
+  const centerHeight = img.shape[0] / 2
+  const beginHeight = centerHeight - (s0 / 2)
+  const centerWidth = img.shape[1] / 2
+  const beginWidth = centerWidth - (s1 / 2)
+  return img.slice([beginHeight, beginWidth, 0], [s0, s1, 1])
+}
+function cropPaddedImage(img, paddings) {
+  if(paddings[0][0]==0 && paddings[0][1]==0 && paddings[1][0]==0 && paddings[1][1]==0){
+    return img
+  }
+  const s0 = paddings[0]
+  const s1 = paddings[1]
+  if(img.shape.length == 3){
+    const sizeHeight = img.shape[0]-s0[1]-s0[0]
+    const sizeWidth = img.shape[1]-s1[1]-s1[0]
+    return img.slice([s0[0], s1[0], 0], [sizeHeight, sizeWidth, 1])
+  }
+  else if(img.shape.length == 4){
+    const sizeHeight = img.shape[1]-s0[1]-s0[0]
+    const sizeWidth = img.shape[2]-s1[1]-s1[0]
+    return img.slice([0, s0[0], s1[0], 0], [1, sizeHeight, sizeWidth, 1])
+  }
+  else{
+    alert('invalid image shape')
+  }
+}
+function cropImage(img, target_size, randomized) {
+  if(img.shape.length == 3){
+    if(target_size[0]==img.shape[0] && target_size[1]==img.shape[1]){
+      return img
+    }
+    return img.slice([0, 0, 0], [target_size[0], target_size[1], 1])
+  }
+  else if(img.shape.length == 4){
+    if(target_size[0]==img.shape[1] && target_size[1]==img.shape[2]){
+      return img
+    }
+    return img.slice([0, 0, 0, 0], [1, target_size[0], target_size[1], 1])
+  }
+  else{
+    alert('invalid image shape')
+  }
+}
+function basePadImage(img, base_size) {
+  const s0 = Math.ceil(img.shape[0]/base_size)*base_size
+  const s1 = Math.ceil(img.shape[1]/base_size)*base_size
+  const p0 = Math.floor((s0-img.shape[0])/2)
+  const p00 = s0-img.shape[0]-p0
+  const p1 = Math.floor((s1-img.shape[1])/2)
+  const p11 = s1-img.shape[1]-p1
+  console.log([[0,0],[p0, p00], [p1, p11], [0, 0]])
+  const ret = tf.pad(img, [[p0, p00], [p1, p11], [0, 0]])
+  console.log(ret.shape)
+  return {tensor: ret.slice([0, 0, 0], [s0, s1, 1]), paddings: [[p0, p00], [p1, p11]]}
+}
+function swap16(val) {
+    return ((val & 0xFF) << 8) | ((val >> 8) & 0xFF);
+}
+function swap32(val) {
+   return ((val & 0xFF) << 24)
+          | ((val & 0xFF00) << 8)
+          | ((val >> 8) & 0xFF00)
+          | ((val >> 24) & 0xFF);
+}
+function ieee32ToFloat(intval) {
+   var fval = 0.0;
+   var x;//exponent
+   var m;//mantissa
+   var s;//sign
+   s = (intval & 0x80000000)?-1:1;
+   x = ((intval >> 23) & 0xFF);
+   m = (intval & 0x7FFFFF);
+   switch(x) {
+       case 0:
+           //zero, do nothing, ignore negative zero and subnormals
+           break;
+       case 0xFF:
+           if (m) fval = NaN;
+           else if (s > 0) fval = Number.POSITIVE_INFINITY;
+           else fval = Number.NEGATIVE_INFINITY;
+           break;
+       default:
+           x -= 127;
+           m += 0x800000;
+           fval = s * (m / 8388608.0) * Math.pow(2, x);
+           break;
+   }
+   return fval;
+}
+class TifFile {
+  constructor(file){
+    this.file = file
+    this.buffer = null
+    this.ifds = null
+    this.frame_num == 0
+  }
+  load(){
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.readAsArrayBuffer(this.file);
+      reader.onloadend = (e)=>{
+        this.buffer = e.target.result
+        this.ifds = UTIF.decode(this.buffer)
+        this.frame_num = this.ifds.length
+        console.log('decoded tiff file', this.ifds)
+        resolve(this)
+      }
+    })
+  }
+  read(frame){
+    const ifd = this.ifds[frame]
+    UTIF.decodeImages(this.buffer, [ifd])
+    const h = ifd.height
+    const w = ifd.width
+    let ret = null
+    let min=Number.POSITIVE_INFINITY, max=Number.NEGATIVE_INFINITY, sticky_min=Number.POSITIVE_INFINITY, sticky_max = Number.NEGATIVE_INFINITY
+    const sticky_factor = 0.1
+    if(ifd.t258 == 16 && ifd.t262==1){
+      const raw = new Uint16Array(ifd.data.buffer)
+      const data = new Uint16Array(ifd.data.buffer)
+      console.assert(raw.length == w*h, 'data length mismatch')
+      let i, v, vb
+      for(i=0;i<w*h;i++){
+        if(!ifd.isLE){
+          v = swap16(raw[i])
+        }
+        else{
+          v = raw[i]
+        }
+        data[i] = v
+        if(v>max) max=v
+        if(v<min) min=v
+        if(v>sticky_max) {
+          if(sticky_max == Number.NEGATIVE_INFINITY){
+            sticky_max = v
+          }
+          else{
+            sticky_max += ((v-sticky_max)*sticky_factor)
+          }
+        }
+        if(v<sticky_min) {
+          if(sticky_min == Number.POSITIVE_INFINITY){
+            sticky_min = v
+          }
+          else{
+            sticky_min += ((v-sticky_min)*sticky_factor)
+          }
+        }
+      }
+      ret = [data, w, h, max, min, sticky_max, sticky_min]
+      console.log('min, max',sticky_min, sticky_max)
+    }
+    else if(ifd.t258 == 32 && ifd.t262==1){
+      const raw = new Uint32Array(ifd.data.buffer)
+      const data = new Float32Array(ifd.data.buffer)
+      console.log(raw.length)
+      console.assert(raw.length == w*h, 'data length mismatch')
+      let i, v, vb
+      for(i=0;i<w*h;i++){
+        if(!ifd.isLE){
+          v = ieee32ToFloat(swap32(raw[i]))
+        }
+        else{
+          v = ieee32ToFloat(raw[i])
+        }
+        data[i] = v
+        if(v>max) max=v
+        if(v<min) min=v
+        if(v>sticky_max) {
+          if(sticky_max == Number.NEGATIVE_INFINITY){
+            sticky_max = v
+          }
+          else{
+            sticky_max += ((v-sticky_max)*sticky_factor)
+          }
+        }
+        if(v<sticky_min) {
+          if(sticky_min == Number.POSITIVE_INFINITY){
+            sticky_min = v
+          }
+          else{
+            sticky_min += ((v-sticky_min)*sticky_factor)
+          }
+        }
+      }
+      ret = [data, w, h, max, min, sticky_max, sticky_min]
+      console.log('min, max',sticky_min, sticky_max)
+    }
+    else{
+      alert('unsupported bitdepth.')
+      ret = null
+    }
+    return ret
+  }
+  render(d, brightness){
+    let [data, w, h, max, min, sticky_max, sticky_min] = d
+    const marg = sticky_max-sticky_min
+    brightness = brightness || 255/sticky_max
+    const canvas = document.createElement('canvas');
+    const context = canvas.getContext('2d');
+    canvas.width = w;
+    canvas.height = h;
+    const imgData = context.createImageData(w, h);
+    const imgdata = imgData.data
+    let i, vb
+    for(i=0;i<w*h;i++){
+      vb = (data[i]-sticky_min)/marg*255*brightness
+      vb = vb>255?255:vb
+      imgdata[i*4] = vb
+      imgdata[i*4+1] = vb
+      imgdata[i*4+2] = vb
+      imgdata[i*4+3] = 255
+    }
+    context.putImageData(imgData, 0, 0);
+    return canvas
+  }
+}
+api.export(new ImJoyPlugin())
+</script>
+
+
+<window lang="html">
+  <div style="width:100%;height:100%;text-align: center;">
+    <h1 id="tf-label"></h1>
+    <button id="predict-btn" class="big-button">Predict</button>
+    <br>
+    <div id="bar-container">
+        <p>Click the bar to see Class Activation Map.</p>
+        <div id="tf-bar"></div>
+    </div>
+    <div id="heatmap-container"></div>
+    <br>
+    <div id="select-buttons"></div>
+    <div id="tf-surface"></div>
+  </div>
+</window>
+
+<style lang="css">
+body{
+    font-family: Roboto,Noto Sans,-apple-system,BlinkMacSystemFont,sans-serif;
+}
+canvas {
+    -moz-user-select: none;
+    -webkit-user-select: none;
+    -ms-user-select: none;
+}
+ @media screen and (min-width: 800px){
+   #bar-container div:first-child{
+  max-width: 50%;
+  float:left;
+}
+#bar-container div:nth-child(2){
+  max-width: 50%;
+  float:left;
+}
+ } 
+ .big-button {
+  background-color: #448aff;
+  border: none;
+  color: white;
+  height: 64px;
+  padding: 15px 32px;
+  text-align: center;
+  text-decoration: none;
+  display: inline-block;
+  font-size: 16px;
+  margin: 10px;
+  cursor:pointer;
+}
+ .small-button {
+  background-color: #448aff;
+  border: none;
+  color: white;
+  height: 32px;
+  text-align: center;
+  text-decoration: none;
+  display: inline-block;
+  font-size: 16px;
+  margin: 10px;
+  cursor:pointer;
+}
+#predict-btn{
+ display: none;
+}
+#heatmap-container {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+}
+#tf-surface {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+}
+#bar-container{
+    height: 100%;
+    max-height: 400px;
+    width:100%!important;
+    max-width: 1024px!important;
+}
+#tf-bar{
+    height: 100%;
+    max-height: 400px;
+    width:100%!important;
+    max-width: 1024px!important;
+}
+</style>
