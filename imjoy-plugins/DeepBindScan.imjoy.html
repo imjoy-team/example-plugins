@@ -1,0 +1,1193 @@
+﻿<docs lang="markdown">
+
+This plugin uses [DeepBind](https://www.nature.com/articles/nbt.3300)
+to predict the binding affinity of transcription factors and RNA binding
+proteins in different species to a user-defined sequence.
+
+It is implemented with Kipoi (https://kipoi.org/), which provides ready-to-use
+trained models for genomics and a corresponding API. The plugin uses the available
+pre-trained [DeepBind models](http://kipoi.org/groups/DeepBind/).
+Results are shown in a vertical bar plot and updated dynamically, while the
+different available models are tested.
+
+Please note that for some organism (e.g. homo sapiens), models for many proteins are provided,
+the prediction will then take several minutes.
+
+</docs>
+
+<config lang="json">
+{
+  "name": "DeepBindScan",
+  "type": "native-python",
+  "version": "0.2.7",
+  "api_version": "0.1.6",
+  "description": "Predict binding affinity of TF/RBP to a given sequence.",
+  "tags": [],
+  "ui": "Predict binding affinity of TF/RBP to a given sequence.",
+  "inputs": null,
+  "outputs": null,
+  "flags": [],
+  "icon": "extension",
+  "env": "conda create -n kipoi-tf python=3.6",
+  "requirements": ["conda: h5py tensorflow>=1.4 keras>=2.0.6 bioconda::pybedtools bioconda::pyfaidx numpy pandas", "pip: kipoi kipoiseq" ],
+  "dependencies": ["imjoy-team/example-plugins:SchemaIO"]
+}
+</config>
+
+<script lang="python">
+import kipoi
+from kipoiseq.transforms import SwapAxes, DummyAxis, Compose, OneHot, ReorderedOneHot
+import numpy as np
+import json
+
+
+class ImJoyPlugin():
+    def setup(self):
+        print('setup in python')
+        self.Window = None
+
+    async def run_(self, my):
+        model_names = await api.getAttachment("model_names")
+        model_names = [ m.strip() for m in model_names.split('\n') if m.strip() != '']
+        model_types = ["'all species'"]+list(set([ "'{}'".format(m.split('/')[0]) for m in model_names]))
+
+        ui = "DeepBind Model Type: {id: 'model_type', type: 'choose', options: [%s], placeholder: %s}<br>"%(','.join(model_types), model_types[0])
+        alphabet_axis=1
+        dummy_axis=None
+        dtype=None
+        alphabet="ACGT"
+        input_transform = ReorderedOneHot(alphabet=alphabet,
+                                        dtype=dtype,
+                                        alphabet_axis=alphabet_axis,
+                                        dummy_axis=dummy_axis)
+        default_sequence = 'GGAGGCGGGAAGATGGAGGCGGTAGCTGTCACTAGGTTGGGGTTCTCCCGCGCGGGAGGCCTATGGGACTGTGTCGTGTCCTGAACAGTCGAGAGGAGCTT'
+
+        ret = await api.showDialog({"ui": ui+"Input DNA sequence (length=101):<br> {id: 'input_seq', type: 'string', placeholder: '%s'}<br>"%(default_sequence)})
+        if len(ret['input_seq']) <101:
+            await api.alert('Sequence length should be 101')
+            return
+        if not ret['model_type'].startswith('all'):
+            model_names = [m for m in model_names if m.startswith(ret['model_type'])]
+        results = []
+        json_prob_list = []
+        for i, m in enumerate(model_names):
+            model = kipoi.get_model("DeepBind/" + m)
+            x = input_transform(ret['input_seq'][:101])
+            x = np.expand_dims(x, axis=0)
+            scan_score = model.predict_on_batch(x)
+            prob = 1.0/(1.0 + np.exp(-scan_score[0]))
+
+            print(type(m))
+            # model_name = str(m)
+            model_name = m
+            if len(model_name.split("_")) == 4:
+                show_cate = model_name.split("/")[0] + "/" + model_name.split("_")[3]
+            elif len(model_name.split("_")) == 5:
+                show_cate = model_name.split("/")[0] + "/" + model_name.split("_")[3]+"_"+model_name.split("_")[4]
+            else:
+                show_cate = model_name.split("/")[0] + "/" + model_name.split("_")[-1]
+            # show_cate = m
+            json_prob_list.append({"Protein": show_cate, "position": 0, "Binding Probability": round(float(prob), 2)})
+
+            await api.log('{}: {}'.format(m,prob))
+            if prob>0.8:
+                results.append('{}: {}'.format(m, prob))
+            await api.showStatus('{}: {}'.format(m, prob))
+            await api.showProgress((i+1)/len(model_names)*100)
+
+        print(json_prob_list)
+        # schema1["data"][0]["values"] = [
+        #     {'Protein': 'Danio_rerio/RBP/D00242.001_RNAcompete_Sf3b4', 'position': 0, 'Binding Probability': 0.4949981840170487},
+        #     {'Protein': 'Danio_rerio/RBP/D00258.001_RNAcompete_Pcbp2', 'position': 0, 'Binding Probability': 0.42060869319311117},
+        #     {'Protein': 'Homo_sapiens/TF/D00298.003_SELEX_ATF4', 'position': 0, 'Binding Probability': 0.6941371015041526},
+        #     {'Protein': 'Homo_sapiens/TF/D00299.003_SELEX_ATF7', 'position': 0, 'Binding Probability': 0.5938085434701403}]
+
+    async def run(self, my):
+        model_names = await api.getAttachment("model_names")
+        model_names = [m.strip() for m in model_names.split('\n') if m.strip() != '']
+        model_types = ["all species"] + list(set(["{}".format(m.split('/')[0]) for m in model_names]))
+        print("model_types:", model_types)
+        default_sequence = 'GGAGGCGGGAAGATGGAGGCGGTAGCTGTCACTAGGTTGGGGTTCTCCCGCGCGGGAGGCCTATGGGACTGTGTCGTGTCCTGAACAGTCGAGAGGAGCTT'
+
+        schema = {
+            "fields": [{
+                "type": "select",
+                "label": "DeepBind Model Type",
+                "model": "modelType",
+                "values": model_types},
+                {
+                    "type": "input",
+                    "inputType": "text",
+                    "label": "Input DNA/RNA sequence (length=101)",
+                    "model": "DNA"}]}
+
+        self.Window = await api.createWindow({
+            "name": 'DeepBindScan',
+            "type": 'SchemaIO',
+            "w": 40,
+            "h": 15,
+            "data": {
+                "title": "Input settings",
+                "schema": schema,
+                "model": {
+                  "DNA": default_sequence,
+                  "modelType": model_types[0]},
+                "callback":  {
+                    "pluginName": 'DeepBindScan',
+                    "functionName": 'show_schema_data'},
+                "show": True,
+                "formOptions": {
+                    "validateAfterLoad": True,
+                    "validateAfterChanged": True},
+                "id": 0}})
+                # "callback": self.show_schema_data}})
+
+    async def show_schema_data(self, data):
+        print("data:", data)
+        ret = data
+
+        schema1 = await api.getAttachment("schema1")
+        model_names = await api.getAttachment("model_names")
+        model_names = [m.strip() for m in model_names.split('\n') if m.strip() != '']
+        # model_types = ["'all species'"] + list(set(["'{}'".format(m.split('/')[0]) for m in model_names]))
+        alphabet_axis = 1
+        dummy_axis = None
+        dtype = None
+        alphabet = "ACGT"
+        input_transform = ReorderedOneHot(alphabet=alphabet,
+                                          dtype=dtype,
+                                          alphabet_axis=alphabet_axis,
+                                          dummy_axis=dummy_axis)
+        if len(ret['DNA']) < 101:
+            await api.alert('Sequence length should be 101')
+            return
+        if not ret['modelType'].startswith('all'):
+            model_names = [m for m in model_names if m.startswith(ret['modelType'])]
+        # print("model_names:", model_names)
+        self.Window.clear_view(0)
+        self.Window.vega_schema_output({
+            "schema": json.loads(schema1),
+            "message": '',
+            "id": 0,
+            "title": "Predicted protein binding probabilities",
+            "show": True,
+            "buttons": []
+        })
+
+        # json_prob_list = []
+        for i, m in enumerate(model_names):
+            model = kipoi.get_model("DeepBind/" + m)
+            x = input_transform(ret['DNA'][:101])
+            x = np.expand_dims(x, axis=0)
+            scan_score = model.predict_on_batch(x)
+            prob = 1.0 / (1.0 + np.exp(-scan_score[0]))
+
+            # model_name = str(m)
+            model_name = m
+
+            if ret['modelType'].startswith('all'):
+                # show_cate = model_name
+                if len(model_name.split("_")) == 4:
+                    show_cate = str(i)+"_"+model_name.split("/")[0] + "/" + model_name.split("_")[3]
+                elif len(model_name.split("_")) == 5:
+                    show_cate = str(i)+"_"+model_name.split("/")[0] + "/" + model_name.split("_")[3]+"_"+model_name.split("_")[4]
+                else:
+                    show_cate = str(i)+"_"+model_name.split("/")[0] + "/" + model_name.split("_")[-1]
+            else:
+                # show_cate = model_name.split("/")[-1]
+                if len(model_name.split("_")) == 4:
+                    show_cate = str(i)+"_"+model_name.split("_")[3]
+                elif len(model_name.split("_")) == 5:
+                    show_cate = str(i)+"_"+model_name.split("_")[3]+"_"+model_name.split("_")[4]
+                else:
+                    show_cate = str(i)+"_"+model_name.split("_")[-1]
+
+            json_prob = {
+                "id": 0,
+                "data": [{"Protein": show_cate, "Binding Probability": round(float(prob), 2)}],
+                "dataName": 'table'}
+            await self.Window.vega_view_insert(json_prob)
+            # json_prob_list.append({"Protein": show_cate, "position": 0, "Binding Probability": round(float(prob), 2)})
+
+            await api.log('{}: {}'.format(m, prob))
+            await api.showStatus('{}: {}'.format(m, prob))
+            await api.showProgress((i + 1) / len(model_names) * 100)
+
+
+api.export(ImJoyPlugin())
+
+</script>
+
+<attachment name="schema1">
+{
+    "$schema":"https://vega.github.io/schema/vega-lite/v3.json",
+    "data":{
+        "name":"table",
+        "values":[]
+    },
+    "encoding":{
+        "y":{
+            "field":"Protein",
+            "type":"ordinal",
+            "sort":{
+                "encoding":"x",
+                "order":"descending"
+            }
+        },
+        "x":{
+            "field":"Binding Probability",
+            "type":"quantitative"
+        }
+    },
+    "layer":[
+        {
+            "mark":"bar"
+        },
+        {
+            "mark":{
+                "type":"text",
+                "align":"left",
+                "baseline":"middle",
+                "dx":3
+            },
+            "encoding":{
+                "text":{
+                    "field":"Binding Probability",
+                    "type":"quantitative"
+                }
+            }
+        }
+    ]
+}
+</attachment>
+
+
+<attachment name="model_names">
+Arabidopsis_thaliana/RBP/D00283.001_RNAcompete_At_0284
+Aspergillus_nidulans/RBP/D00273.001_RNAcompete_An_0265
+Aspergillus_nidulans/RBP/D00285.001_RNAcompete_An_0287
+Caenorhabditis_elegans/RBP/D00088.001_RNAcompete_TIAR-3
+Caenorhabditis_elegans/RBP/D00097.001_RNAcompete_EXC-7
+Caenorhabditis_elegans/RBP/D00100.001_RNAcompete_FOX-1
+Caenorhabditis_elegans/RBP/D00121.001_RNAcompete_MEX-5
+Caenorhabditis_elegans/RBP/D00161.001_RNAcompete_UNC-75
+Caenorhabditis_elegans/RBP/D00217.001_RNAcompete_SUP-12
+Caenorhabditis_elegans/RBP/D00218.001_RNAcompete_ASD-1
+Caenorhabditis_elegans/RBP/D00219.001_RNAcompete_MEC-8
+Caenorhabditis_elegans/RBP/D00220.001_RNAcompete_SUP-26
+Caenorhabditis_elegans/RBP/D00221.001_RNAcompete_ETR-1
+Caenorhabditis_elegans/RBP/D00266.001_RNAcompete_TIAR-1
+Danio_rerio/RBP/D00242.001_RNAcompete_Sf3b4
+Danio_rerio/RBP/D00258.001_RNAcompete_Pcbp2
+Danio_rerio/RBP/D00259.001_RNAcompete_Rbm4.3
+Danio_rerio/RBP/D00282.001_RNAcompete_Rbm38
+Drosophila_melanogaster/RBP/D00086.001_RNAcompete_ARET
+Drosophila_melanogaster/RBP/D00086.002_RNAcompete_ARET
+Drosophila_melanogaster/RBP/D00086.003_RNAcompete_ARET
+Drosophila_melanogaster/RBP/D00089.001_RNAcompete_CG14718
+Drosophila_melanogaster/RBP/D00090.001_RNAcompete_CG2950
+Drosophila_melanogaster/RBP/D00091.001_RNAcompete_CNOT4
+Drosophila_melanogaster/RBP/D00092.001_RNAcompete_CG33714
+Drosophila_melanogaster/RBP/D00093.001_RNAcompete_CG5213
+Drosophila_melanogaster/RBP/D00094.001_RNAcompete_PAPI
+Drosophila_melanogaster/RBP/D00098.001_RNAcompete_FMR1
+Drosophila_melanogaster/RBP/D00111.001_RNAcompete_HRB27C
+Drosophila_melanogaster/RBP/D00111.002_RNAcompete_HRB27C
+Drosophila_melanogaster/RBP/D00112.001_RNAcompete_HRB87F
+Drosophila_melanogaster/RBP/D00117.001_RNAcompete_LARK
+Drosophila_melanogaster/RBP/D00117.002_RNAcompete_LARK
+Drosophila_melanogaster/RBP/D00117.003_RNAcompete_LARK
+Drosophila_melanogaster/RBP/D00122.001_RNAcompete_MSI
+Drosophila_melanogaster/RBP/D00122.002_RNAcompete_MSI
+Drosophila_melanogaster/RBP/D00122.003_RNAcompete_MSI
+Drosophila_melanogaster/RBP/D00128.001_RNAcompete_PUM
+Drosophila_melanogaster/RBP/D00128.002_RNAcompete_PUM
+Drosophila_melanogaster/RBP/D00128.003_RNAcompete_PUM
+Drosophila_melanogaster/RBP/D00128.004_RNAcompete_PUM
+Drosophila_melanogaster/RBP/D00128.005_RNAcompete_PUM
+Drosophila_melanogaster/RBP/D00128.006_RNAcompete_PUM
+Drosophila_melanogaster/RBP/D00139.001_RNAcompete_RBP1
+Drosophila_melanogaster/RBP/D00140.001_RNAcompete_REF2
+Drosophila_melanogaster/RBP/D00141.001_RNAcompete_RNP4F
+Drosophila_melanogaster/RBP/D00142.001_RNAcompete_RSF1
+Drosophila_melanogaster/RBP/D00146.001_RNAcompete_SF1
+Drosophila_melanogaster/RBP/D00147.001_RNAcompete_SF2
+Drosophila_melanogaster/RBP/D00149.001_RNAcompete_SHEP
+Drosophila_melanogaster/RBP/D00149.002_RNAcompete_SHEP
+Drosophila_melanogaster/RBP/D00149.003_RNAcompete_SHEP
+Drosophila_melanogaster/RBP/D00150.001_RNAcompete_SM
+Drosophila_melanogaster/RBP/D00158.001_RNAcompete_TRA2
+Drosophila_melanogaster/RBP/D00160.001_RNAcompete_U2AF50
+Drosophila_melanogaster/RBP/D00168.001_RNAcompete_HRB98DE
+Drosophila_melanogaster/RBP/D00168.002_RNAcompete_HRB98DE
+Drosophila_melanogaster/RBP/D00168.003_RNAcompete_HRB98DE
+Drosophila_melanogaster/RBP/D00170.001_RNAcompete_HOW
+Drosophila_melanogaster/RBP/D00171.001_RNAcompete_SXL
+Drosophila_melanogaster/RBP/D00172.001_RNAcompete_FNE
+Drosophila_melanogaster/RBP/D00173.001_RNAcompete_ELAV
+Drosophila_melanogaster/RBP/D00174.001_RNAcompete_BRU-3
+Drosophila_melanogaster/RBP/D00175.001_RNAcompete_A2BP1
+Drosophila_melanogaster/RBP/D00176.001_RNAcompete_ORB2
+Drosophila_melanogaster/RBP/D00177.001_RNAcompete_RBP1-LIKE
+Drosophila_melanogaster/RBP/D00178.001_RNAcompete_CG11360
+Drosophila_melanogaster/RBP/D00179.001_RNAcompete_CG17838
+Drosophila_melanogaster/RBP/D00180.001_RNAcompete_RBP9
+Drosophila_melanogaster/RBP/D00181.001_RNAcompete_CPO
+Drosophila_melanogaster/RBP/D00182.001_RNAcompete_B52
+Drosophila_melanogaster/RBP/D00183.001_RNAcompete_MUB
+Drosophila_melanogaster/RBP/D00184.001_RNAcompete_RIN
+Drosophila_melanogaster/RBP/D00185.001_RNAcompete_PABP
+Drosophila_melanogaster/RBP/D00186.001_RNAcompete_MOD
+Drosophila_melanogaster/RBP/D00187.001_RNAcompete_PUF68
+Drosophila_melanogaster/RBP/D00188.001_RNAcompete_QKR58E-1
+Drosophila_melanogaster/RBP/D00189.001_RNAcompete_SNRNP70K
+Drosophila_melanogaster/RBP/D00190.001_RNAcompete_CG7903
+Drosophila_melanogaster/RBP/D00191.001_RNAcompete_SNF
+Drosophila_melanogaster/RBP/D00192.001_RNAcompete_CG7804
+Drosophila_melanogaster/RBP/D00193.001_RNAcompete_CG2931
+Drosophila_melanogaster/RBP/D00194.001_RNAcompete_ROX8
+Drosophila_melanogaster/RBP/D00275.001_RNAcompete_SRP54
+Drosophila_melanogaster/RBP/D00276.001_RNAcompete_EIF-2ALPHA
+Gallus_gallus/RBP/D00278.001_RNAcompete_RBM47
+Gallus_gallus/RBP/D00286.001_RNAcompete_HNRNPR
+Gallus_gallus/RBP/D00288.001_RNAcompete_A1CF
+Homo_sapiens/RBP/D00084.001_RNAcompete_A1CF
+Homo_sapiens/RBP/D00085.001_RNAcompete_ANKHD1
+Homo_sapiens/RBP/D00087.001_RNAcompete_BRUNOL4
+Homo_sapiens/RBP/D00095.001_RNAcompete_CPEB2
+Homo_sapiens/RBP/D00096.001_RNAcompete_DAZAP1
+Homo_sapiens/RBP/D00099.001_RNAcompete_FMR1
+Homo_sapiens/RBP/D00101.001_RNAcompete_FUS
+Homo_sapiens/RBP/D00102.001_RNAcompete_SRSF10
+Homo_sapiens/RBP/D00102.002_RNAcompete_SRSF10
+Homo_sapiens/RBP/D00102.003_RNAcompete_SRSF10
+Homo_sapiens/RBP/D00102.004_RNAcompete_SRSF10
+Homo_sapiens/RBP/D00103.001_RNAcompete_FXR2
+Homo_sapiens/RBP/D00104.001_RNAcompete_G3BP2
+Homo_sapiens/RBP/D00105.001_RNAcompete_HNRNPA1
+Homo_sapiens/RBP/D00106.001_RNAcompete_HNRNPA1L2
+Homo_sapiens/RBP/D00107.001_RNAcompete_HNRNPA2B1
+Homo_sapiens/RBP/D00108.001_RNAcompete_HNRNPC
+Homo_sapiens/RBP/D00109.001_RNAcompete_HNRNPK
+Homo_sapiens/RBP/D00110.001_RNAcompete_HNRNPL
+Homo_sapiens/RBP/D00110.002_RNAcompete_HNRNPL
+Homo_sapiens/RBP/D00114.001_RNAcompete_HuR
+Homo_sapiens/RBP/D00114.002_RNAcompete_HuR
+Homo_sapiens/RBP/D00114.003_RNAcompete_HuR
+Homo_sapiens/RBP/D00114.004_RNAcompete_HuR
+Homo_sapiens/RBP/D00114.005_RNAcompete_HuR
+Homo_sapiens/RBP/D00115.001_RNAcompete_IGF2BP2
+Homo_sapiens/RBP/D00116.001_RNAcompete_KHDRBS3
+Homo_sapiens/RBP/D00118.001_RNAcompete_LIN28A
+Homo_sapiens/RBP/D00118.002_RNAcompete_LIN28A
+Homo_sapiens/RBP/D00119.001_RNAcompete_MATR3
+Homo_sapiens/RBP/D00120.001_RNAcompete_MBNL1
+Homo_sapiens/RBP/D00123.001_RNAcompete_MSI1
+Homo_sapiens/RBP/D00123.002_RNAcompete_MSI1
+Homo_sapiens/RBP/D00125.001_RNAcompete_PABPC4
+Homo_sapiens/RBP/D00126.001_RNAcompete_PCBP2
+Homo_sapiens/RBP/D00127.001_RNAcompete_PPRC1
+Homo_sapiens/RBP/D00129.001_RNAcompete_QKI
+Homo_sapiens/RBP/D00130.001_RNAcompete_RBM28
+Homo_sapiens/RBP/D00131.001_RNAcompete_RBM3
+Homo_sapiens/RBP/D00133.001_RNAcompete_RBM4
+Homo_sapiens/RBP/D00133.002_RNAcompete_RBM4
+Homo_sapiens/RBP/D00134.001_RNAcompete_RBM41
+Homo_sapiens/RBP/D00135.001_RNAcompete_RBM46
+Homo_sapiens/RBP/D00136.001_RNAcompete_RBM5
+Homo_sapiens/RBP/D00136.002_RNAcompete_RBM5
+Homo_sapiens/RBP/D00137.001_RNAcompete_RBM8A
+Homo_sapiens/RBP/D00138.001_RNAcompete_RBMS3
+Homo_sapiens/RBP/D00138.002_RNAcompete_RBMS3
+Homo_sapiens/RBP/D00144.001_RNAcompete_SAMD4A
+Homo_sapiens/RBP/D00145.001_RNAcompete_SART3
+Homo_sapiens/RBP/D00148.001_RNAcompete_SRSF9
+Homo_sapiens/RBP/D00148.002_RNAcompete_SRSF9
+Homo_sapiens/RBP/D00151.001_RNAcompete_SNRNP70
+Homo_sapiens/RBP/D00152.001_RNAcompete_SNRPA
+Homo_sapiens/RBP/D00153.001_RNAcompete_SRSF2
+Homo_sapiens/RBP/D00154.001_RNAcompete_SRSF7
+Homo_sapiens/RBP/D00155.001_RNAcompete_STAR-PAP
+Homo_sapiens/RBP/D00156.001_RNAcompete_TARDBP
+Homo_sapiens/RBP/D00157.001_RNAcompete_TIA1
+Homo_sapiens/RBP/D00157.002_RNAcompete_TIA1
+Homo_sapiens/RBP/D00159.001_RNAcompete_U2AF2
+Homo_sapiens/RBP/D00163.001_RNAcompete_YBX1
+Homo_sapiens/RBP/D00163.002_RNAcompete_YBX1
+Homo_sapiens/RBP/D00164.001_RNAcompete_YBX2
+Homo_sapiens/RBP/D00165.001_RNAcompete_ZC3H10
+Homo_sapiens/RBP/D00166.001_RNAcompete_ZC3H14
+Homo_sapiens/RBP/D00167.001_RNAcompete_ZCRB1
+Homo_sapiens/RBP/D00169.001_RNAcompete_SRSF1
+Homo_sapiens/RBP/D00169.002_RNAcompete_SRSF1
+Homo_sapiens/RBP/D00169.003_RNAcompete_SRSF1
+Homo_sapiens/RBP/D00169.004_RNAcompete_SRSF1
+Homo_sapiens/RBP/D00169.005_RNAcompete_SRSF1
+Homo_sapiens/RBP/D00169.006_RNAcompete_SRSF1
+Homo_sapiens/RBP/D00195.001_RNAcompete_ENOX1
+Homo_sapiens/RBP/D00196.001_RNAcompete_ESRP2
+Homo_sapiens/RBP/D00197.001_RNAcompete_RBM42
+Homo_sapiens/RBP/D00198.001_RNAcompete_RBMS1
+Homo_sapiens/RBP/D00199.001_RNAcompete_PABPC3
+Homo_sapiens/RBP/D00200.001_RNAcompete_PABPC1
+Homo_sapiens/RBP/D00201.001_RNAcompete_CNOT4
+Homo_sapiens/RBP/D00202.001_RNAcompete_PABPN1
+Homo_sapiens/RBP/D00203.001_RNAcompete_CPEB4
+Homo_sapiens/RBP/D00204.001_RNAcompete_RALY
+Homo_sapiens/RBP/D00205.001_RNAcompete_HNRNPH2
+Homo_sapiens/RBP/D00206.001_RNAcompete_FXR1
+Homo_sapiens/RBP/D00207.001_RNAcompete_ZNF638
+Homo_sapiens/RBP/D00208.001_RNAcompete_BRUNOL5
+Homo_sapiens/RBP/D00209.001_RNAcompete_HNRNPCL1
+Homo_sapiens/RBP/D00210.001_RNAcompete_RBFOX1
+Homo_sapiens/RBP/D00211.001_RNAcompete_KHDRBS1
+Homo_sapiens/RBP/D00212.001_RNAcompete_RBM6
+Homo_sapiens/RBP/D00213.001_RNAcompete_PABPC5
+Homo_sapiens/RBP/D00214.001_RNAcompete_IGF2BP3
+Homo_sapiens/RBP/D00215.001_RNAcompete_SFPQ
+Homo_sapiens/RBP/D00216.001_RNAcompete_HNRPLL
+Homo_sapiens/RBP/D00222.001_RNAcompete_RBM24
+Homo_sapiens/RBP/D00223.001_RNAcompete_KHDRBS2
+Homo_sapiens/RBP/D00224.001_RNAcompete_PCBP1
+Homo_sapiens/RBP/D00225.001_RNAcompete_BRUNOL6
+Homo_sapiens/RBP/D00256.001_RNAcompete_RBM45
+Homo_sapiens/RBP/D00274.001_RNAcompete_PTBP1
+Homo_sapiens/RBP/D00274.002_RNAcompete_PTBP1
+Homo_sapiens/TF/D00290.003_SELEX_ALX3
+Homo_sapiens/TF/D00292.001_SELEX_ALX4
+Homo_sapiens/TF/D00293.003_SELEX_ARNTL
+Homo_sapiens/TF/D00295.002_SELEX_ARX
+Homo_sapiens/TF/D00296.006_SELEX_AR
+Homo_sapiens/TF/D00298.003_SELEX_ATF4
+Homo_sapiens/TF/D00299.003_SELEX_ATF7
+Homo_sapiens/TF/D00302.003_SELEX_BARHL2
+Homo_sapiens/TF/D00303.002_SELEX_BARX1
+Homo_sapiens/TF/D00304.003_SELEX_BATF3
+Homo_sapiens/TF/D00305.003_SELEX_BCL6B
+Homo_sapiens/TF/D00306.003_SELEX_BHLHA15
+Homo_sapiens/TF/D00308.003_SELEX_BHLHB2
+Homo_sapiens/TF/D00309.002_SELEX_BHLHB3
+Homo_sapiens/TF/D00310.002_SELEX_BHLHE22
+Homo_sapiens/TF/D00311.003_SELEX_BHLHE23
+Homo_sapiens/TF/D00312.002_SELEX_BHLHE41
+Homo_sapiens/TF/D00313.002_SELEX_BSX
+Homo_sapiens/TF/D00314.001_SELEX_CART1
+Homo_sapiens/TF/D00315.003_SELEX_CDX1
+Homo_sapiens/TF/D00316.003_SELEX_CDX2
+Homo_sapiens/TF/D00317.003_SELEX_CEBPB
+Homo_sapiens/TF/D00317.009_ChIP-seq_CEBPB
+Homo_sapiens/TF/D00318.001_SELEX_CEBPD
+Homo_sapiens/TF/D00318.004_ChIP-seq_CEBPD
+Homo_sapiens/TF/D00319.003_SELEX_CEBPE
+Homo_sapiens/TF/D00320.001_SELEX_CEBPG
+Homo_sapiens/TF/D00321.003_SELEX_CENPB
+Homo_sapiens/TF/D00322.002_SELEX_CLOCK
+Homo_sapiens/TF/D00323.002_SELEX_CPEB1
+Homo_sapiens/TF/D00324.003_SELEX_CREB3L1
+Homo_sapiens/TF/D00326.002_SELEX_CREB3
+Homo_sapiens/TF/D00328.003_SELEX_CTCF
+Homo_sapiens/TF/D00328.018_ChIP-seq_CTCF
+Homo_sapiens/TF/D00329.002_SELEX_CUX1
+Homo_sapiens/TF/D00330.002_SELEX_CUX2
+Homo_sapiens/TF/D00331.006_SELEX_DBP
+Homo_sapiens/TF/D00332.003_SELEX_DLX1
+Homo_sapiens/TF/D00335.003_SELEX_DLX2
+Homo_sapiens/TF/D00336.001_SELEX_DLX3
+Homo_sapiens/TF/D00337.001_SELEX_DLX4
+Homo_sapiens/TF/D00338.002_SELEX_DLX5
+Homo_sapiens/TF/D00339.002_SELEX_DLX6
+Homo_sapiens/TF/D00340.003_SELEX_DMBX1
+Homo_sapiens/TF/D00341.003_SELEX_DPRX
+Homo_sapiens/TF/D00342.003_SELEX_DRGX
+Homo_sapiens/TF/D00343.003_SELEX_DUXA
+Homo_sapiens/TF/D00344.002_SELEX_E2F1
+Homo_sapiens/TF/D00344.005_ChIP-seq_E2F1
+Homo_sapiens/TF/D00345.002_SELEX_E2F2
+Homo_sapiens/TF/D00346.003_SELEX_E2F3
+Homo_sapiens/TF/D00347.003_SELEX_E2F4
+Homo_sapiens/TF/D00347.005_ChIP-seq_E2F4
+Homo_sapiens/TF/D00348.003_SELEX_E2F7
+Homo_sapiens/TF/D00349.002_SELEX_E2F8
+Homo_sapiens/TF/D00350.002_SELEX_EBF1
+Homo_sapiens/TF/D00350.005_ChIP-seq_EBF1
+Homo_sapiens/TF/D00351.001_SELEX_EGR1
+Homo_sapiens/TF/D00351.006_SELEX_EGR1
+Homo_sapiens/TF/D00351.009_ChIP-seq_EGR1
+Homo_sapiens/TF/D00353.005_SELEX_EGR2
+Homo_sapiens/TF/D00354.002_SELEX_EGR3
+Homo_sapiens/TF/D00355.002_SELEX_EGR4
+Homo_sapiens/TF/D00356.005_SELEX_ELF1
+Homo_sapiens/TF/D00356.010_ChIP-seq_ELF1
+Homo_sapiens/TF/D00357.002_SELEX_ELF3
+Homo_sapiens/TF/D00359.004_SELEX_ELF5
+Homo_sapiens/TF/D00360.004_SELEX_ELK1
+Homo_sapiens/TF/D00360.007_ChIP-seq_ELK1
+Homo_sapiens/TF/D00361.001_SELEX_ELK3
+Homo_sapiens/TF/D00363.003_SELEX_ELK4
+Homo_sapiens/TF/D00363.004_ChIP-seq_ELK4
+Homo_sapiens/TF/D00364.002_SELEX_EMX1
+Homo_sapiens/TF/D00365.003_SELEX_EMX2
+Homo_sapiens/TF/D00366.003_SELEX_EN1
+Homo_sapiens/TF/D00368.007_SELEX_EN2
+Homo_sapiens/TF/D00369.003_SELEX_EOMES
+Homo_sapiens/TF/D00370.003_SELEX_ERF
+Homo_sapiens/TF/D00371.003_SELEX_ERG
+Homo_sapiens/TF/D00372.003_SELEX_ESR1
+Homo_sapiens/TF/D00374.003_SELEX_ESRRA
+Homo_sapiens/TF/D00375.003_SELEX_ESRRB
+Homo_sapiens/TF/D00376.003_SELEX_ESRRG
+Homo_sapiens/TF/D00377.001_SELEX_ESX1
+Homo_sapiens/TF/D00378.007_SELEX_ETS1
+Homo_sapiens/TF/D00378.009_ChIP-seq_ETS1
+Homo_sapiens/TF/D00379.001_SELEX_ETV1
+Homo_sapiens/TF/D00380.002_SELEX_ETV2
+Homo_sapiens/TF/D00381.003_SELEX_ETV3
+Homo_sapiens/TF/D00382.003_SELEX_ETV4
+Homo_sapiens/TF/D00383.002_SELEX_ETV5
+Homo_sapiens/TF/D00384.002_SELEX_ETV6
+Homo_sapiens/TF/D00385.002_SELEX_EVX1
+Homo_sapiens/TF/D00386.001_SELEX_EVX2
+Homo_sapiens/TF/D00387.001_SELEX_FEV
+Homo_sapiens/TF/D00388.003_SELEX_FIGLA
+Homo_sapiens/TF/D00389.005_SELEX_FLI1
+Homo_sapiens/TF/D00390.002_SELEX_FOXB1
+Homo_sapiens/TF/D00392.002_SELEX_FOXC1
+Homo_sapiens/TF/D00393.003_SELEX_FOXC2
+Homo_sapiens/TF/D00394.003_SELEX_FOXD2
+Homo_sapiens/TF/D00395.002_SELEX_FOXD3
+Homo_sapiens/TF/D00396.003_SELEX_FOXG1
+Homo_sapiens/TF/D00397.003_SELEX_FOXI1
+Homo_sapiens/TF/D00398.001_SELEX_FOXJ2
+Homo_sapiens/TF/D00400.003_SELEX_FOXJ3
+Homo_sapiens/TF/D00401.003_SELEX_FOXK1
+Homo_sapiens/TF/D00403.001_SELEX_FOXL1
+Homo_sapiens/TF/D00404.002_SELEX_FOXO1
+Homo_sapiens/TF/D00405.003_SELEX_FOXO3
+Homo_sapiens/TF/D00406.002_SELEX_FOXO4
+Homo_sapiens/TF/D00407.003_SELEX_FOXO6
+Homo_sapiens/TF/D00408.003_SELEX_FOXP3
+Homo_sapiens/TF/D00409.003_SELEX_GABPA
+Homo_sapiens/TF/D00409.004_ChIP-seq_GABPA
+Homo_sapiens/TF/D00410.003_SELEX_GATA3
+Homo_sapiens/TF/D00410.009_ChIP-seq_GATA3
+Homo_sapiens/TF/D00411.003_SELEX_GATA4
+Homo_sapiens/TF/D00412.002_SELEX_GATA5
+Homo_sapiens/TF/D00413.003_SELEX_GBX1
+Homo_sapiens/TF/D00416.005_SELEX_GBX2
+Homo_sapiens/TF/D00417.005_SELEX_GCM1
+Homo_sapiens/TF/D00418.003_SELEX_GCM2
+Homo_sapiens/TF/D00419.003_SELEX_GLI2
+Homo_sapiens/TF/D00420.004_SELEX_GLIS1
+Homo_sapiens/TF/D00421.003_SELEX_GLIS2
+Homo_sapiens/TF/D00422.003_SELEX_GLIS3
+Homo_sapiens/TF/D00423.005_SELEX_GMEB2
+Homo_sapiens/TF/D00424.002_SELEX_GRHL1
+Homo_sapiens/TF/D00425.002_SELEX_GSC2
+Homo_sapiens/TF/D00426.003_SELEX_GSC
+Homo_sapiens/TF/D00427.003_SELEX_GSX1
+Homo_sapiens/TF/D00428.002_SELEX_GSX2
+Homo_sapiens/TF/D00429.003_SELEX_HES5
+Homo_sapiens/TF/D00430.003_SELEX_HES7
+Homo_sapiens/TF/D00431.002_SELEX_HESX1
+Homo_sapiens/TF/D00432.003_SELEX_HEY1
+Homo_sapiens/TF/D00433.003_SELEX_HEY2
+Homo_sapiens/TF/D00435.003_SELEX_HIC2
+Homo_sapiens/TF/D00436.002_SELEX_HINFP1
+Homo_sapiens/TF/D00438.003_SELEX_HLF
+Homo_sapiens/TF/D00440.003_SELEX_HMX1
+Homo_sapiens/TF/D00441.003_SELEX_HMX2
+Homo_sapiens/TF/D00442.003_SELEX_HMX3
+Homo_sapiens/TF/D00443.001_SELEX_HNF1A
+Homo_sapiens/TF/D00444.001_SELEX_HNF1B
+Homo_sapiens/TF/D00446.005_SELEX_HNF4A
+Homo_sapiens/TF/D00446.009_ChIP-seq_HNF4A
+Homo_sapiens/TF/D00447.002_SELEX_HOMEZ
+Homo_sapiens/TF/D00448.002_SELEX_HOXA10
+Homo_sapiens/TF/D00450.003_SELEX_HOXA13
+Homo_sapiens/TF/D00451.002_SELEX_HOXA1
+Homo_sapiens/TF/D00453.002_SELEX_HOXA2
+Homo_sapiens/TF/D00454.003_SELEX_HOXB13
+Homo_sapiens/TF/D00455.001_SELEX_HOXB2
+Homo_sapiens/TF/D00456.001_SELEX_HOXB3
+Homo_sapiens/TF/D00457.003_SELEX_HOXB5
+Homo_sapiens/TF/D00459.003_SELEX_HOXC10
+Homo_sapiens/TF/D00460.003_SELEX_HOXC11
+Homo_sapiens/TF/D00461.003_SELEX_HOXC12
+Homo_sapiens/TF/D00462.002_SELEX_HOXC13
+Homo_sapiens/TF/D00463.003_SELEX_HOXD11
+Homo_sapiens/TF/D00464.001_SELEX_HOXD12
+Homo_sapiens/TF/D00465.003_SELEX_HOXD13
+Homo_sapiens/TF/D00468.003_SELEX_HOXD8
+Homo_sapiens/TF/D00470.005_SELEX_HSF1
+Homo_sapiens/TF/D00471.002_SELEX_HSF2
+Homo_sapiens/TF/D00472.003_SELEX_HSF4
+Homo_sapiens/TF/D00473.003_SELEX_HSFY2
+Homo_sapiens/TF/D00474.003_SELEX_ID4
+Homo_sapiens/TF/D00475.003_SELEX_IRF3
+Homo_sapiens/TF/D00475.006_ChIP-seq_IRF3
+Homo_sapiens/TF/D00476.002_SELEX_IRF4
+Homo_sapiens/TF/D00476.004_ChIP-seq_IRF4
+Homo_sapiens/TF/D00477.003_SELEX_IRF5
+Homo_sapiens/TF/D00478.003_SELEX_IRF7
+Homo_sapiens/TF/D00479.006_SELEX_IRF8
+Homo_sapiens/TF/D00480.002_SELEX_IRF9
+Homo_sapiens/TF/D00481.003_SELEX_IRX2
+Homo_sapiens/TF/D00483.001_SELEX_IRX5
+Homo_sapiens/TF/D00484.003_SELEX_ISL2
+Homo_sapiens/TF/D00485.004_SELEX_ISX
+Homo_sapiens/TF/D00487.003_SELEX_JDP2
+Homo_sapiens/TF/D00488.003_SELEX_KLF13
+Homo_sapiens/TF/D00489.002_SELEX_KLF14
+Homo_sapiens/TF/D00490.003_SELEX_KLF16
+Homo_sapiens/TF/D00491.003_SELEX_LBX2
+Homo_sapiens/TF/D00492.003_SELEX_LEF1
+Homo_sapiens/TF/D00493.003_SELEX_LHX2
+Homo_sapiens/TF/D00495.003_SELEX_LHX6
+Homo_sapiens/TF/D00497.002_SELEX_LHX9
+Homo_sapiens/TF/D00498.002_SELEX_LMX1A
+Homo_sapiens/TF/D00499.001_SELEX_LMX1B
+Homo_sapiens/TF/D00501.003_SELEX_MAFF
+Homo_sapiens/TF/D00501.004_ChIP-seq_MAFF
+Homo_sapiens/TF/D00502.002_SELEX_MAFG
+Homo_sapiens/TF/D00503.004_SELEX_MAFK
+Homo_sapiens/TF/D00503.014_ChIP-seq_MAFK
+Homo_sapiens/TF/D00504.002_SELEX_MAX
+Homo_sapiens/TF/D00504.005_ChIP-seq_MAX
+Homo_sapiens/TF/D00505.003_SELEX_MEF2A
+Homo_sapiens/TF/D00506.003_SELEX_MEF2B
+Homo_sapiens/TF/D00505.006_ChIP-seq_MEF2A
+Homo_sapiens/TF/D00507.002_SELEX_MEF2D
+Homo_sapiens/TF/D00508.004_SELEX_MEIS1
+Homo_sapiens/TF/D00510.003_SELEX_MEIS2
+Homo_sapiens/TF/D00512.001_SELEX_MEIS3
+Homo_sapiens/TF/D00513.002_SELEX_MEOX1
+Homo_sapiens/TF/D00515.002_SELEX_MEOX2
+Homo_sapiens/TF/D00516.002_SELEX_MESP1
+Homo_sapiens/TF/D00517.002_SELEX_MGA
+Homo_sapiens/TF/D00518.002_SELEX_MIXL1
+Homo_sapiens/TF/D00519.002_SELEX_MLXIPL
+Homo_sapiens/TF/D00520.002_SELEX_MLX
+Homo_sapiens/TF/D00521.003_SELEX_MNT
+Homo_sapiens/TF/D00522.002_SELEX_MNX1
+Homo_sapiens/TF/D00523.003_SELEX_MSC
+Homo_sapiens/TF/D00524.002_SELEX_MSX1
+Homo_sapiens/TF/D00525.002_SELEX_MSX2
+Homo_sapiens/TF/D00527.003_SELEX_MTF1
+Homo_sapiens/TF/D00528.001_SELEX_MYBL1
+Homo_sapiens/TF/D00529.001_SELEX_MYBL2
+Homo_sapiens/TF/D00529.004_ChIP-seq_MYBL2
+Homo_sapiens/TF/D00530.003_SELEX_MYF6
+Homo_sapiens/TF/D00531.003_SELEX_NEUROD2
+Homo_sapiens/TF/D00532.003_SELEX_NEUROG2
+Homo_sapiens/TF/D00533.003_SELEX_NFAT5
+Homo_sapiens/TF/D00534.003_SELEX_NFATC1
+Homo_sapiens/TF/D00534.004_ChIP-seq_NFATC1
+Homo_sapiens/TF/D00535.003_SELEX_NFE2
+Homo_sapiens/TF/D00535.004_ChIP-seq_NFE2
+Homo_sapiens/TF/D00536.003_SELEX_NFIA
+Homo_sapiens/TF/D00537.001_SELEX_NFIB
+Homo_sapiens/TF/D00538.001_SELEX_NFIL3
+Homo_sapiens/TF/D00539.001_SELEX_NFIX
+Homo_sapiens/TF/D00540.002_SELEX_NFKB1
+Homo_sapiens/TF/D00541.001_SELEX_NFKB2
+Homo_sapiens/TF/D00542.005_SELEX_NHLH1
+Homo_sapiens/TF/D00543.005_SELEX_NKX2-3
+Homo_sapiens/TF/D00544.005_SELEX_NKX2-8
+Homo_sapiens/TF/D00546.003_SELEX_NKX3-1
+Homo_sapiens/TF/D00547.003_SELEX_NKX3-2
+Homo_sapiens/TF/D00549.002_SELEX_NKX6-1
+Homo_sapiens/TF/D00550.002_SELEX_NKX6-2
+Homo_sapiens/TF/D00551.002_SELEX_NOTO
+Homo_sapiens/TF/D00552.002_SELEX_NR2C2
+Homo_sapiens/TF/D00552.006_ChIP-seq_NR2C2
+Homo_sapiens/TF/D00553.003_SELEX_NR2E1
+Homo_sapiens/TF/D00554.003_SELEX_NR2F1
+Homo_sapiens/TF/D00555.002_SELEX_NR2F6
+Homo_sapiens/TF/D00556.003_SELEX_NR3C1
+Homo_sapiens/TF/D00557.002_SELEX_NR3C2
+Homo_sapiens/TF/D00558.002_SELEX_NR4A2
+Homo_sapiens/TF/D00559.001_SELEX_NRF1
+Homo_sapiens/TF/D00559.006_ChIP-seq_NRF1
+Homo_sapiens/TF/D00560.003_SELEX_NRL
+Homo_sapiens/TF/D00561.001_SELEX_OLIG1
+Homo_sapiens/TF/D00562.006_SELEX_OLIG2
+Homo_sapiens/TF/D00563.002_SELEX_OLIG3
+Homo_sapiens/TF/D00564.004_SELEX_ONECUT1
+Homo_sapiens/TF/D00565.002_SELEX_ONECUT2
+Homo_sapiens/TF/D00566.003_SELEX_ONECUT3
+Homo_sapiens/TF/D00568.001_SELEX_OTX1
+Homo_sapiens/TF/D00569.002_SELEX_OTX2
+Homo_sapiens/TF/D00570.002_SELEX_PAX1
+Homo_sapiens/TF/D00571.002_SELEX_PAX2
+Homo_sapiens/TF/D00572.002_SELEX_PAX3
+Homo_sapiens/TF/D00573.002_SELEX_PAX4
+Homo_sapiens/TF/D00574.002_SELEX_PAX5
+Homo_sapiens/TF/D00574.006_ChIP-seq_PAX5
+Homo_sapiens/TF/D00575.003_SELEX_PAX6
+Homo_sapiens/TF/D00576.005_SELEX_PAX7
+Homo_sapiens/TF/D00577.002_SELEX_PAX9
+Homo_sapiens/TF/D00578.002_SELEX_PDX1
+Homo_sapiens/TF/D00579.002_SELEX_PHOX2A
+Homo_sapiens/TF/D00580.005_SELEX_PHOX2B
+Homo_sapiens/TF/D00581.002_SELEX_PITX1
+Homo_sapiens/TF/D00582.001_SELEX_PITX3
+Homo_sapiens/TF/D00583.002_SELEX_PKNOX1
+Homo_sapiens/TF/D00585.003_SELEX_PKNOX2
+Homo_sapiens/TF/D00586.004_SELEX_POU1F1
+Homo_sapiens/TF/D00587.002_SELEX_POU2F1
+Homo_sapiens/TF/D00589.001_SELEX_POU2F2
+Homo_sapiens/TF/D00589.005_ChIP-seq_POU2F2
+Homo_sapiens/TF/D00590.001_SELEX_POU2F3
+Homo_sapiens/TF/D00591.002_SELEX_POU3F1
+Homo_sapiens/TF/D00592.003_SELEX_POU3F2
+Homo_sapiens/TF/D00593.003_SELEX_POU3F3
+Homo_sapiens/TF/D00594.002_SELEX_POU3F4
+Homo_sapiens/TF/D00595.001_SELEX_POU4F1
+Homo_sapiens/TF/D00596.005_SELEX_POU4F2
+Homo_sapiens/TF/D00597.001_SELEX_POU4F3
+Homo_sapiens/TF/D00598.001_SELEX_POU5F1P1
+Homo_sapiens/TF/D00599.006_SELEX_POU6F2
+Homo_sapiens/TF/D00600.001_SELEX_PRDM1
+Homo_sapiens/TF/D00600.004_ChIP-seq_PRDM1
+Homo_sapiens/TF/D00601.003_SELEX_PRDM4
+Homo_sapiens/TF/D00602.008_SELEX_PROP1
+Homo_sapiens/TF/D00603.003_SELEX_PROX1
+Homo_sapiens/TF/D00604.004_SELEX_PRRX1
+Homo_sapiens/TF/D00606.002_SELEX_PRRX2
+Homo_sapiens/TF/D00607.006_SELEX_RARA
+Homo_sapiens/TF/D00610.003_SELEX_RARB
+Homo_sapiens/TF/D00611.001_SELEX_RARG
+Homo_sapiens/TF/D00612.001_SELEX_RAXL1
+Homo_sapiens/TF/D00613.002_SELEX_RAX
+Homo_sapiens/TF/D00614.001_SELEX_RFX2
+Homo_sapiens/TF/D00616.002_SELEX_RFX3
+Homo_sapiens/TF/D00618.003_SELEX_RFX4
+Homo_sapiens/TF/D00619.003_SELEX_RFX5
+Homo_sapiens/TF/D00619.007_ChIP-seq_RFX5
+Homo_sapiens/TF/D00621.003_SELEX_RHOXF1
+Homo_sapiens/TF/D00622.003_SELEX_RORA
+Homo_sapiens/TF/D00623.003_SELEX_RUNX2
+Homo_sapiens/TF/D00624.007_SELEX_RUNX3
+Homo_sapiens/TF/D00624.009_ChIP-seq_RUNX3
+Homo_sapiens/TF/D00626.005_SELEX_RXRA
+Homo_sapiens/TF/D00626.009_ChIP-seq_RXRA
+Homo_sapiens/TF/D00628.002_SELEX_RXRB
+Homo_sapiens/TF/D00629.006_SELEX_RXRG
+Homo_sapiens/TF/D00630.003_SELEX_SCRT1
+Homo_sapiens/TF/D00631.002_SELEX_SCRT2
+Homo_sapiens/TF/D00632.001_SELEX_SHOX2
+Homo_sapiens/TF/D00634.001_SELEX_SHOX
+Homo_sapiens/TF/D00635.001_SELEX_SMAD3
+Homo_sapiens/TF/D00636.003_SELEX_SNAI2
+Homo_sapiens/TF/D00637.003_SELEX_SOX10
+Homo_sapiens/TF/D00639.003_SELEX_SOX14
+Homo_sapiens/TF/D00640.003_SELEX_SOX15
+Homo_sapiens/TF/D00642.003_SELEX_SOX18
+Homo_sapiens/TF/D00644.003_SELEX_SOX21
+Homo_sapiens/TF/D00645.006_SELEX_SOX2
+Homo_sapiens/TF/D00646.002_SELEX_SOX4
+Homo_sapiens/TF/D00647.002_SELEX_SOX7
+Homo_sapiens/TF/D00648.004_SELEX_SOX8
+Homo_sapiens/TF/D00649.002_SELEX_SOX9
+Homo_sapiens/TF/D00650.005_SELEX_SP1
+Homo_sapiens/TF/D00650.007_ChIP-seq_SP1
+Homo_sapiens/TF/D00651.003_SELEX_SP3
+Homo_sapiens/TF/D00652.003_SELEX_SP4
+Homo_sapiens/TF/D00652.004_ChIP-seq_SP4
+Homo_sapiens/TF/D00653.003_SELEX_SP8
+Homo_sapiens/TF/D00654.003_SELEX_SPDEF
+Homo_sapiens/TF/D00655.002_SELEX_SPI1
+Homo_sapiens/TF/D00655.006_ChIP-seq_SPI1
+Homo_sapiens/TF/D00656.001_SELEX_SPIB
+Homo_sapiens/TF/D00658.003_SELEX_SPIC
+Homo_sapiens/TF/D00659.002_SELEX_SREBF2
+Homo_sapiens/TF/D00660.005_SELEX_SRF
+Homo_sapiens/TF/D00660.007_ChIP-seq_SRF
+Homo_sapiens/TF/D00661.003_SELEX_SRY
+Homo_sapiens/TF/D00662.003_SELEX_TBR1
+Homo_sapiens/TF/D00663.002_SELEX_TBX15
+Homo_sapiens/TF/D00664.002_SELEX_TBX19
+Homo_sapiens/TF/D00665.002_SELEX_TBX1
+Homo_sapiens/TF/D00666.002_SELEX_TBX20
+Homo_sapiens/TF/D00667.001_SELEX_TBX21
+Homo_sapiens/TF/D00668.003_SELEX_TBX2
+Homo_sapiens/TF/D00669.002_SELEX_TBX4
+Homo_sapiens/TF/D00670.002_SELEX_TBX5
+Homo_sapiens/TF/D00672.001_SELEX_TCF3
+Homo_sapiens/TF/D00673.001_SELEX_TCF4
+Homo_sapiens/TF/D00674.003_SELEX_TCF7L1
+Homo_sapiens/TF/D00677.003_SELEX_TEAD1
+Homo_sapiens/TF/D00678.001_SELEX_TEAD3
+Homo_sapiens/TF/D00679.004_ChIP-seq_TEAD4
+Homo_sapiens/TF/D00680.001_SELEX_TEF
+Homo_sapiens/TF/D00681.002_SELEX_TFAP2A
+Homo_sapiens/TF/D00681.004_ChIP-seq_TFAP2A
+Homo_sapiens/TF/D00682.002_SELEX_TFAP2B
+Homo_sapiens/TF/D00683.002_SELEX_TFAP2C
+Homo_sapiens/TF/D00683.007_ChIP-seq_TFAP2C
+Homo_sapiens/TF/D00684.005_SELEX_TFAP4
+Homo_sapiens/TF/D00685.003_SELEX_TFCP2
+Homo_sapiens/TF/D00686.002_SELEX_TFE3
+Homo_sapiens/TF/D00687.001_SELEX_TFEB
+Homo_sapiens/TF/D00688.002_SELEX_TFEC
+Homo_sapiens/TF/D00689.003_SELEX_TGIF1
+Homo_sapiens/TF/D00690.003_SELEX_TGIF2LX
+Homo_sapiens/TF/D00691.001_SELEX_TGIF2
+Homo_sapiens/TF/D00692.002_SELEX_THRA
+Homo_sapiens/TF/D00693.002_SELEX_THRB
+Homo_sapiens/TF/D00695.002_SELEX_TP63
+Homo_sapiens/TF/D00697.002_SELEX_T
+Homo_sapiens/TF/D00698.001_SELEX_UNCX
+Homo_sapiens/TF/D00700.001_SELEX_USF1
+Homo_sapiens/TF/D00700.006_ChIP-seq_USF1
+Homo_sapiens/TF/D00701.001_SELEX_VAX1
+Homo_sapiens/TF/D00702.001_SELEX_VAX2
+Homo_sapiens/TF/D00704.001_SELEX_VDR
+Homo_sapiens/TF/D00705.003_SELEX_VENTX
+Homo_sapiens/TF/D00707.004_SELEX_VSX1
+Homo_sapiens/TF/D00708.001_SELEX_VSX2
+Homo_sapiens/TF/D00709.002_SELEX_XBP1
+Homo_sapiens/TF/D00710.002_SELEX_YY1
+Homo_sapiens/TF/D00710.007_ChIP-seq_YY1
+Homo_sapiens/TF/D00711.003_SELEX_YY2
+Homo_sapiens/TF/D00712.002_SELEX_ZBED1
+Homo_sapiens/TF/D00713.003_SELEX_ZBTB49
+Homo_sapiens/TF/D00714.003_SELEX_ZBTB7A
+Homo_sapiens/TF/D00714.004_ChIP-seq_ZBTB7A
+Homo_sapiens/TF/D00715.002_SELEX_ZBTB7B
+Homo_sapiens/TF/D00716.004_SELEX_ZBTB7C
+Homo_sapiens/TF/D00719.002_SELEX_ZIC1
+Homo_sapiens/TF/D00721.002_SELEX_ZIC3
+Homo_sapiens/TF/D00722.002_SELEX_ZIC4
+Homo_sapiens/TF/D00723.003_SELEX_ZNF143
+Homo_sapiens/TF/D00723.006_ChIP-seq_ZNF143
+Homo_sapiens/TF/D00724.003_SELEX_ZNF232
+Homo_sapiens/TF/D00725.004_SELEX_ZNF238
+Homo_sapiens/TF/D00726.003_SELEX_ZNF282
+Homo_sapiens/TF/D00727.003_SELEX_ZNF306
+Homo_sapiens/TF/D00728.002_SELEX_ZNF410
+Homo_sapiens/TF/D00729.003_SELEX_ZNF435
+Homo_sapiens/TF/D00730.002_SELEX_ZNF524
+Homo_sapiens/TF/D00731.003_SELEX_ZNF713
+Homo_sapiens/TF/D00732.005_SELEX_ZNF740
+Homo_sapiens/TF/D00733.003_SELEX_ZNF75A
+Homo_sapiens/TF/D00734.003_SELEX_ZNF784
+Homo_sapiens/TF/D00735.002_SELEX_ZSCAN4
+Homo_sapiens/TF/D00736.002_ChIP-seq_ARID3A
+Homo_sapiens/TF/D00737.001_ChIP-seq_ATF1
+Homo_sapiens/TF/D00738.002_ChIP-seq_ATF2
+Homo_sapiens/TF/D00739.001_ChIP-seq_ATF3
+Homo_sapiens/TF/D00740.002_ChIP-seq_BACH1
+Homo_sapiens/TF/D00741.001_ChIP-seq_BATF
+Homo_sapiens/TF/D00742.002_ChIP-seq_BCL11A
+Homo_sapiens/TF/D00743.001_ChIP-seq_BCL3
+Homo_sapiens/TF/D00744.001_ChIP-seq_BCLAF1
+Homo_sapiens/TF/D00745.001_ChIP-seq_BDP1
+Homo_sapiens/TF/D00746.004_ChIP-seq_BHLHE40
+Homo_sapiens/TF/D00747.001_ChIP-seq_BRCA1
+Homo_sapiens/TF/D00748.001_ChIP-seq_CBX3
+Homo_sapiens/TF/D00749.001_ChIP-seq_CCNT2
+Homo_sapiens/TF/D00750.001_ChIP-seq_CHD1
+Homo_sapiens/TF/D00751.005_ChIP-seq_CHD2
+Homo_sapiens/TF/D00754.003_ChIP-seq_E2F6
+Homo_sapiens/TF/D00752.001_ChIP-seq_CTBP2
+Homo_sapiens/TF/D00753.001_ChIP-seq_CTCFL
+Homo_sapiens/TF/D00755.003_ChIP-seq_EP300
+Homo_sapiens/TF/D00755.005_ChIP-seq_EP300
+Homo_sapiens/TF/D00756.007_ChIP-seq_EZH2
+Homo_sapiens/TF/D00757.001_ChIP-seq_FAM48A
+Homo_sapiens/TF/D00758.001_ChIP-seq_FOSL1
+Homo_sapiens/TF/D00759.001_ChIP-seq_FOSL2
+Homo_sapiens/TF/D00760.003_ChIP-seq_FOS
+Homo_sapiens/TF/D00761.001_ChIP-seq_FOXA1
+Homo_sapiens/TF/D00762.001_ChIP-seq_FOXA2
+Homo_sapiens/TF/D00763.001_ChIP-seq_FOXM1
+Homo_sapiens/TF/D00764.001_ChIP-seq_FOXP2
+Homo_sapiens/TF/D00765.001_ChIP-seq_GATA1
+Homo_sapiens/TF/D00766.002_ChIP-seq_GATA2
+Homo_sapiens/TF/D00767.001_ChIP-seq_GTF2B
+Homo_sapiens/TF/D00768.001_ChIP-seq_GTF2F1
+Homo_sapiens/TF/D00769.001_ChIP-seq_HDAC1
+Homo_sapiens/TF/D00770.002_ChIP-seq_HDAC2
+Homo_sapiens/TF/D00771.001_ChIP-seq_HDAC6
+Homo_sapiens/TF/D00772.001_ChIP-seq_HMGN3
+Homo_sapiens/TF/D00773.001_ChIP-seq_HNF4G
+Homo_sapiens/TF/D00774.001_ChIP-seq_IKZF1
+Homo_sapiens/TF/D00775.001_ChIP-seq_JUNB
+Homo_sapiens/TF/D00776.005_ChIP-seq_JUND
+Homo_sapiens/TF/D00777.002_ChIP-seq_JUN
+Homo_sapiens/TF/D00778.002_ChIP-seq_KAP1
+Homo_sapiens/TF/D00779.001_ChIP-seq_KDM5A
+Homo_sapiens/TF/D00780.001_ChIP-seq_KDM5B
+Homo_sapiens/TF/D00781.003_ChIP-seq_MAZ
+Homo_sapiens/TF/D00782.001_ChIP-seq_MEF2C
+Homo_sapiens/TF/D00783.001_ChIP-seq_MTA3
+Homo_sapiens/TF/D00784.004_ChIP-seq_MXI1
+Homo_sapiens/TF/D00785.001_ChIP-seq_MYC
+Homo_sapiens/TF/D00786.001_ChIP-seq_NANOG
+Homo_sapiens/TF/D00787.002_ChIP-seq_NFIC
+Homo_sapiens/TF/D00788.001_ChIP-seq_NFYA
+Homo_sapiens/TF/D00789.003_ChIP-seq_NFYB
+Homo_sapiens/TF/D00790.001_ChIP-seq_NR2F2
+Homo_sapiens/TF/D00791.001_ChIP-seq_PBX3
+Homo_sapiens/TF/D00792.001_ChIP-seq_PHF8
+Homo_sapiens/TF/D00793.002_ChIP-seq_PML
+Homo_sapiens/TF/D00794.047_ChIP-seq_POLR2A
+Homo_sapiens/TF/D00795.001_ChIP-seq_POU5F1
+Homo_sapiens/TF/D00796.001_ChIP-seq_RAD21
+Homo_sapiens/TF/D00797.001_ChIP-seq_RBBP5
+Homo_sapiens/TF/D00798.001_ChIP-seq_RCOR1
+Homo_sapiens/TF/D00799.001_ChIP-seq_REST
+Homo_sapiens/TF/D00800.001_ChIP-seq_RPC155
+Homo_sapiens/TF/D00801.001_ChIP-seq_SAP30
+Homo_sapiens/TF/D00802.001_ChIP-seq_SETDB1
+Homo_sapiens/TF/D00803.002_ChIP-seq_SIN3AK20
+Homo_sapiens/TF/D00804.002_ChIP-seq_SIN3A
+Homo_sapiens/TF/D00805.001_ChIP-seq_SIRT6
+Homo_sapiens/TF/D00806.003_ChIP-seq_SIX5
+Homo_sapiens/TF/D00807.001_ChIP-seq_SMARCB1
+Homo_sapiens/TF/D00808.004_ChIP-seq_SMC3
+Homo_sapiens/TF/D00809.002_ChIP-seq_SP2
+Homo_sapiens/TF/D00810.001_ChIP-seq_STAT3
+Homo_sapiens/TF/D00811.001_ChIP-seq_STAT5A
+Homo_sapiens/TF/D00812.001_ChIP-seq_SUZ12
+Homo_sapiens/TF/D00813.009_ChIP-seq_TAF1
+Homo_sapiens/TF/D00814.001_ChIP-seq_TAF7
+Homo_sapiens/TF/D00815.001_ChIP-seq_TAL1
+Homo_sapiens/TF/D00816.001_ChIP-seq_TBL1XR1
+Homo_sapiens/TF/D00817.001_ChIP-seq_TBP
+Homo_sapiens/TF/D00818.003_ChIP-seq_TCF12
+Homo_sapiens/TF/D00819.002_ChIP-seq_TCF7L2
+Homo_sapiens/TF/D00820.001_ChIP-seq_THAP1
+Homo_sapiens/TF/D00821.001_ChIP-seq_TRIM28
+Homo_sapiens/TF/D00822.001_ChIP-seq_UBTF
+Homo_sapiens/TF/D00823.002_ChIP-seq_USF2
+Homo_sapiens/TF/D00824.001_ChIP-seq_WRNIP1
+Homo_sapiens/TF/D00825.001_ChIP-seq_ZBTB33
+Homo_sapiens/TF/D00826.001_ChIP-seq_ZEB1
+Homo_sapiens/TF/D00827.001_ChIP-seq_ZNF217
+Homo_sapiens/TF/D00828.002_ChIP-seq_ZNF263
+Homo_sapiens/TF/D00829.002_ChIP-seq_ZNF274
+Leishmania_major/RBP/D00234.001_RNAcompete_Lm_0212
+Leishmania_major/RBP/D00241.001_RNAcompete_Lm_0223
+Leishmania_major/RBP/D00264.001_RNAcompete_Lm_0254
+Leishmania_major/RBP/D00265.001_RNAcompete_Lm_0255
+Mus_Musculus/TF/D00352.002_SELEX_Egr1
+Mus_Musculus/TF/D00694.003_SELEX_Tp53
+Mus_Musculus/TF/D00696.003_SELEX_Tp73
+Mus_musculus/RBP/D00132.001_RNAcompete_RBM38
+Mus_musculus/RBP/D00143.001_RNAcompete_KHDRBS1
+Mus_musculus/RBP/D00235.001_RNAcompete_PCBP3
+Mus_musculus/RBP/D00254.001_RNAcompete_PCBP1
+Mus_musculus/TF/D00001.001_PBM_Cebpb
+Mus_musculus/TF/D00001.004_SELEX_Cebpb
+Mus_musculus/TF/D00002.001_PBM_Egr2
+Mus_musculus/TF/D00003.001_PBM_Esr1
+Mus_musculus/TF/D00004.001_PBM_Foxj2
+Mus_musculus/TF/D00005.001_PBM_Foxo1
+Mus_musculus/TF/D00006.001_PBM_Foxo3
+Mus_musculus/TF/D00007.001_PBM_Foxo4
+Mus_musculus/TF/D00008.001_PBM_Foxp1
+Mus_musculus/TF/D00009.001_PBM_Foxp2
+Mus_musculus/TF/D00010.001_PBM_Gmeb2
+Mus_musculus/TF/D00011.001_PBM_Irf2
+Mus_musculus/TF/D00013.001_PBM_Mecp2
+Mus_musculus/TF/D00014.001_PBM_Nr2c1
+Mus_musculus/TF/D00015.001_PBM_Pou3f1
+Mus_musculus/TF/D00016.001_PBM_Sox14
+Mus_musculus/TF/D00017.001_PBM_Sp1
+Mus_musculus/TF/D00018.001_PBM_Tbx3
+Mus_musculus/TF/D00019.001_PBM_Tcf3
+Mus_musculus/TF/D00020.001_PBM_Zscan20
+Mus_musculus/TF/D00021.001_PBM_Ar
+Mus_musculus/TF/D00021.005_SELEX_Ar
+Mus_musculus/TF/D00022.001_PBM_Dbp
+Mus_musculus/TF/D00022.002_SELEX_Dbp
+Mus_musculus/TF/D00023.001_PBM_Foxo6
+Mus_musculus/TF/D00024.001_PBM_Klf12
+Mus_musculus/TF/D00024.004_SELEX_Klf12
+Mus_musculus/TF/D00025.001_PBM_Klf8
+Mus_musculus/TF/D00026.001_PBM_Klf9
+Mus_musculus/TF/D00027.001_PBM_Mlx
+Mus_musculus/TF/D00027.003_SELEX_Mlx
+Mus_musculus/TF/D00028.001_PBM_Mzf1
+Mus_musculus/TF/D00028.002_PBM_Mzf1
+Mus_musculus/TF/D00029.001_PBM_Nfil3
+Mus_musculus/TF/D00030.001_PBM_Nr2f6
+Mus_musculus/TF/D00030.004_SELEX_Nr2f6
+Mus_musculus/TF/D00031.001_PBM_Nr4a2
+Mus_musculus/TF/D00032.001_PBM_Oct1
+Mus_musculus/TF/D00033.001_PBM_P42pop
+Mus_musculus/TF/D00034.001_PBM_Pit1
+Mus_musculus/TF/D00035.001_PBM_Prdm11
+Mus_musculus/TF/D00036.001_PBM_Rorb
+Mus_musculus/TF/D00037.001_PBM_Sox10
+Mus_musculus/TF/D00037.003_SELEX_Sox10
+Mus_musculus/TF/D00038.001_PBM_Sox3
+Mus_musculus/TF/D00038.003_SELEX_Sox3
+Mus_musculus/TF/D00039.001_PBM_Sox6
+Mus_musculus/TF/D00040.001_PBM_Srebf1
+Mus_musculus/TF/D00040.003_SELEX_Srebf1
+Mus_musculus/TF/D00041.001_PBM_Tbx2
+Mus_musculus/TF/D00042.001_PBM_Tbx20
+Mus_musculus/TF/D00043.001_PBM_Tbx4
+Mus_musculus/TF/D00044.001_PBM_Tbx5
+Mus_musculus/TF/D00045.001_PBM_Tfec
+Mus_musculus/TF/D00046.001_PBM_Xbp1
+Mus_musculus/TF/D00047.001_PBM_Zfp202
+Mus_musculus/TF/D00048.001_PBM_Zfp263
+Mus_musculus/TF/D00049.001_PBM_Zfp3
+Mus_musculus/TF/D00050.001_PBM_Zfx
+Mus_musculus/TF/D00051.001_PBM_Zkscan1
+Mus_musculus/TF/D00052.001_PBM_Zscan10
+Mus_musculus/TF/D00052.002_PBM_Zscan10
+Mus_musculus/TF/D00052.003_PBM_Zscan10
+Mus_musculus/TF/D00053.001_PBM_Ahctf1
+Mus_musculus/TF/D00054.001_PBM_Atf3
+Mus_musculus/TF/D00055.001_PBM_Atf4
+Mus_musculus/TF/D00055.004_SELEX_Atf4
+Mus_musculus/TF/D00056.001_PBM_chr15-10391820-10399583
+Mus_musculus/TF/D00057.001_PBM_Dmrtc2
+Mus_musculus/TF/D00058.001_PBM_Egr3
+Mus_musculus/TF/D00058.004_SELEX_Egr3
+Mus_musculus/TF/D00059.001_PBM_Esrrb
+Mus_musculus/TF/D00060.001_PBM_Esrrg
+Mus_musculus/TF/D00061.001_PBM_Foxc2
+Mus_musculus/TF/D00062.001_PBM_Foxg1
+Mus_musculus/TF/D00062.004_SELEX_Foxg1
+Mus_musculus/TF/D00063.001_PBM_Gata4
+Mus_musculus/TF/D00064.001_PBM_Mybl2
+Mus_musculus/TF/D00065.001_PBM_Nhlh2
+Mus_musculus/TF/D00066.001_PBM_Nkx2-9
+Mus_musculus/TF/D00067.001_PBM_Nr2e1
+Mus_musculus/TF/D00067.004_SELEX_Nr2e1
+Mus_musculus/TF/D00068.001_PBM_Nr2f1
+Mus_musculus/TF/D00069.001_PBM_Nr5a2
+Mus_musculus/TF/D00070.001_PBM_Pou1f1
+Mus_musculus/TF/D00071.001_PBM_Rarg
+Mus_musculus/TF/D00071.003_SELEX_Rarg
+Mus_musculus/TF/D00072.001_PBM_Rfx7
+Mus_musculus/TF/D00073.001_PBM_Rora
+Mus_musculus/TF/D00074.001_PBM_Sdccag8
+Mus_musculus/TF/D00075.001_PBM_Snai1
+Mus_musculus/TF/D00076.001_PBM_Sp140
+Mus_musculus/TF/D00077.001_PBM_Tbx1
+Mus_musculus/TF/D00078.001_PBM_Zbtb1
+Mus_musculus/TF/D00079.001_PBM_Zfp300
+Mus_musculus/TF/D00080.001_PBM_Zfp637
+Mus_musculus/TF/D00081.001_PBM_Zic5
+Mus_musculus/TF/D00082.001_PBM_Zkscan5
+Mus_musculus/TF/D00083.001_PBM_Znf740
+Mus_musculus/TF/D00289.002_SELEX_Alx1
+Mus_musculus/TF/D00291.002_SELEX_Alx4
+Mus_musculus/TF/D00294.001_SELEX_Arx
+Mus_musculus/TF/D00297.002_SELEX_Ascl2
+Mus_musculus/TF/D00300.003_SELEX_Atoh1
+Mus_musculus/TF/D00301.003_SELEX_Barhl1
+Mus_musculus/TF/D00307.001_SELEX_Bhlhb2
+Mus_musculus/TF/D00325.003_SELEX_Creb3l2
+Mus_musculus/TF/D00327.002_SELEX_Creb5
+Mus_musculus/TF/D00333.004_SELEX_Dlx1
+Mus_musculus/TF/D00334.002_SELEX_Dlx2
+Mus_musculus/TF/D00358.003_SELEX_Elf5
+Mus_musculus/TF/D00362.002_SELEX_Elk3
+Mus_musculus/TF/D00367.003_SELEX_En2
+Mus_musculus/TF/D00373.003_SELEX_Esrra
+Mus_musculus/TF/D00391.003_SELEX_Foxc1
+Mus_musculus/TF/D00399.002_SELEX_Foxj3
+Mus_musculus/TF/D00402.001_SELEX_Foxk1
+Mus_musculus/TF/D00414.003_SELEX_Gbx1
+Mus_musculus/TF/D00415.003_SELEX_Gbx2
+Mus_musculus/TF/D00434.003_SELEX_Hic1
+Mus_musculus/TF/D00437.004_SELEX_Hlf
+Mus_musculus/TF/D00439.003_SELEX_HMBOX1
+Mus_musculus/TF/D00445.003_SELEX_Hnf4a
+Mus_musculus/TF/D00449.002_SELEX_Hoxa11
+Mus_musculus/TF/D00452.001_SELEX_Hoxa2
+Mus_musculus/TF/D00458.003_SELEX_Hoxc10
+Mus_musculus/TF/D00466.003_SELEX_Hoxd13
+Mus_musculus/TF/D00467.002_SELEX_Hoxd3
+Mus_musculus/TF/D00469.003_SELEX_Hoxd9
+Mus_musculus/TF/D00482.003_SELEX_Irx3
+Mus_musculus/TF/D00486.002_SELEX_Jdp2
+Mus_musculus/TF/D00494.002_SELEX_Lhx4
+Mus_musculus/TF/D00496.002_SELEX_Lhx8
+Mus_musculus/TF/D00500.002_SELEX_Mafb
+Mus_musculus/TF/D00509.001_SELEX_Meis2
+Mus_musculus/TF/D00511.002_SELEX_Meis3
+Mus_musculus/TF/D00514.003_SELEX_Meox2
+Mus_musculus/TF/D00526.001_SELEX_Msx3
+Mus_musculus/TF/D00545.002_SELEX_Nkx3-1
+Mus_musculus/TF/D00548.002_SELEX_Nkx6-1
+Mus_musculus/TF/D00567.002_SELEX_Otx1
+Mus_musculus/TF/D00584.001_SELEX_Pknox2
+Mus_musculus/TF/D00588.002_SELEX_Pou2f2
+Mus_musculus/TF/D00605.003_SELEX_Prrx2
+Mus_musculus/TF/D00608.002_SELEX_Rara
+Mus_musculus/TF/D00609.002_SELEX_Rarb
+Mus_musculus/TF/D00615.001_SELEX_Rfx2
+Mus_musculus/TF/D00617.002_SELEX_Rfx3
+Mus_musculus/TF/D00620.003_SELEX_Rhox11
+Mus_musculus/TF/D00625.001_SELEX_Rxra
+Mus_musculus/TF/D00627.002_SELEX_Rxrb
+Mus_musculus/TF/D00633.001_SELEX_Shox2
+Mus_musculus/TF/D00638.003_SELEX_Sox11
+Mus_musculus/TF/D00641.002_SELEX_Sox17
+Mus_musculus/TF/D00643.002_SELEX_Sox1
+Mus_musculus/TF/D00657.003_SELEX_Spic
+Mus_musculus/TF/D00671.003_SELEX_Tcf21
+Mus_musculus/TF/D00675.001_SELEX_Tcf7
+Mus_musculus/TF/D00676.002_SELEX_Tcfap2a
+Mus_musculus/TF/D00699.001_SELEX_Uncx
+Mus_musculus/TF/D00703.002_SELEX_Vdr
+Mus_musculus/TF/D00706.001_SELEX_Vsx1
+Mus_musculus/TF/D00717.003_SELEX_Zfp652
+Mus_musculus/TF/D00718.002_SELEX_Zfp740
+Mus_musculus/TF/D00720.002_SELEX_Zic3
+Naegleria_gruberi/RBP/D00270.001_RNAcompete_Ng_0261
+Nematostella_vectensis/RBP/D00277.001_RNAcompete_Nv_0278
+Neurospora_crassa/RBP/D00233.001_RNAcompete_NCU08034
+Neurospora_crassa/RBP/D00253.001_RNAcompete_NCU02404
+Ostreococcus_tauri/RBP/D00271.001_RNAcompete_Ot_0262
+Ostreococcus_tauri/RBP/D00272.001_RNAcompete_Ot_0263
+Physcomitrella_patens/RBP/D00232.001_RNAcompete_Pp_0206
+Physcomitrella_patens/RBP/D00245.001_RNAcompete_Pp_0228
+Physcomitrella_patens/RBP/D00246.001_RNAcompete_Pp_0229
+Physcomitrella_patens/RBP/D00252.001_RNAcompete_Pp_0237
+Phytophthora_ramorum/RBP/D00260.001_RNAcompete_Pr_0249
+Plasmodium_falciparum/RBP/D00226.001_RNAcompete_MAL8P1.40
+Plasmodium_falciparum/RBP/D00227.001_RNAcompete_PF10_0068
+Plasmodium_falciparum/RBP/D00228.001_RNAcompete_PF13_0315
+Plasmodium_falciparum/RBP/D00229.001_RNAcompete_PFI1435w
+Plasmodium_falciparum/RBP/D00230.001_RNAcompete_PFI1695c
+Plasmodium_falciparum/RBP/D00249.001_RNAcompete_MAL13P1.35
+Plasmodium_falciparum/RBP/D00250.001_RNAcompete_PFF0320c
+Plasmodium_falciparum/RBP/D00255.001_RNAcompete_PF10_0214
+Rhizopus_oryzae/RBP/D00231.001_RNAcompete_RO3G_00049
+Saccharomyces_cerevisiae/RBP/D00113.001_RNAcompete_Hrp1p
+Saccharomyces_cerevisiae/RBP/D00124.001_RNAcompete_Nab2p
+Saccharomyces_cerevisiae/RBP/D00162.001_RNAcompete_Vts1p
+Saccharomyces_cerevisiae/RBP/D00162.002_RNAcompete_Vts1p
+Schistosoma_mansoni/RBP/D00248.001_RNAcompete_Smp_067420
+Tetraodon_nigroviridis/RBP/D00257.001_RNAcompete_HNRNPAB
+Tetraodon_nigroviridis/RBP/D00284.001_RNAcompete_Rbm24
+Thalassiosira_pseudonana/RBP/D00243.001_RNAcompete_Tp_0225
+Trichomonas_vaginalis/RBP/D00244.001_RNAcompete_Tv_0226
+Trichomonas_vaginalis/RBP/D00251.001_RNAcompete_Tv_0236
+Trichomonas_vaginalis/RBP/D00267.001_RNAcompete_Tv_0257
+Trichomonas_vaginalis/RBP/D00268.001_RNAcompete_Tv_0258
+Trichomonas_vaginalis/RBP/D00269.001_RNAcompete_Tv_0259
+Trypanosoma_brucei/RBP/D00236.001_RNAcompete_Tb_0216
+Trypanosoma_brucei/RBP/D00237.001_RNAcompete_Tb_0217
+Trypanosoma_brucei/RBP/D00238.001_RNAcompete_Tb_0218
+Trypanosoma_brucei/RBP/D00239.001_RNAcompete_Tb_0219
+Trypanosoma_brucei/RBP/D00240.001_RNAcompete_Tb_0220
+Trypanosoma_brucei/RBP/D00247.001_RNAcompete_Tb_0230
+Trypanosoma_brucei/RBP/D00261.001_RNAcompete_Tb_0251
+Trypanosoma_brucei/RBP/D00262.001_RNAcompete_Tb_0252
+Trypanosoma_brucei/RBP/D00263.001_RNAcompete_Tb_0253
+Xenopus_tropicalis/RBP/D00279.001_RNAcompete_Rbm47
+Xenopus_tropicalis/RBP/D00280.001_RNAcompete_Syncrip
+Xenopus_tropicalis/RBP/D00281.001_RNAcompete_Rbm42
+Xenopus_tropicalis/RBP/D00287.001_RNAcompete_Hnrnpr
+</attachment>
