@@ -1,5 +1,4 @@
 ﻿<docs lang="markdown">
-
 This plugin uses [DeepBind](https://www.nature.com/articles/nbt.3300)
 to predict the binding affinity of transcription factors and RNA binding
 proteins in different species to a user-defined sequence.
@@ -12,15 +11,14 @@ different available models are tested.
 
 Please note that for some organism (e.g. homo sapiens), models for many proteins are provided,
 the prediction will then take several minutes.
-
 </docs>
 
 <config lang="json">
 {
   "name": "DeepBindScan",
   "type": "native-python",
-  "version": "0.2.7",
-  "api_version": "0.1.6",
+  "version": "0.2.9",
+  "api_version": "0.1.3",
   "description": "Predict binding affinity of TF/RBP to a given sequence.",
   "tags": [],
   "ui": "Predict binding affinity of TF/RBP to a given sequence.",
@@ -45,6 +43,7 @@ class ImJoyPlugin():
     def setup(self):
         print('setup in python')
         self.Window = None
+        self.prob_list = None
 
     async def run_(self, my):
         model_names = await api.getAttachment("model_names")
@@ -142,6 +141,15 @@ class ImJoyPlugin():
                 "id": 0}})
                 # "callback": self.show_schema_data}})
 
+    async def export_result(self, args):
+        if self.prob_list is not None:
+            temp = 'Model,Binding Probability\n'
+            for row in self.prob_list:
+                temp += (str(row['Model']) + ',' + str(row['Binding Probability']) + '\n')
+            await api.exportFile(temp, 'deepbind_result.csv')
+        else:
+            await api.alert('No result to export')
+        
     async def show_schema_data(self, data):
         print("data:", data)
         ret = data
@@ -171,10 +179,15 @@ class ImJoyPlugin():
             "id": 0,
             "title": "Predicted protein binding probabilities",
             "show": True,
-            "buttons": []
+            "buttons": [{"name": "Export", 
+                "callback": {
+                    "pluginName": 'DeepBindScan',
+                    "functionName": 'export_result'
+                }
+            }]
         })
 
-        # json_prob_list = []
+        self.prob_list = []
         for i, m in enumerate(model_names):
             model = kipoi.get_model("DeepBind/" + m)
             x = input_transform(ret['DNA'][:101])
@@ -184,7 +197,8 @@ class ImJoyPlugin():
 
             # model_name = str(m)
             model_name = m
-
+            self.prob_list.append({"Model": model_name, "Binding Probability": prob})
+    
             if ret['modelType'].startswith('all'):
                 # show_cate = model_name
                 if len(model_name.split("_")) == 4:
@@ -207,7 +221,7 @@ class ImJoyPlugin():
                 "data": [{"Protein": show_cate, "Binding Probability": round(float(prob), 2)}],
                 "dataName": 'table'}
             await self.Window.vega_view_insert(json_prob)
-            # json_prob_list.append({"Protein": show_cate, "position": 0, "Binding Probability": round(float(prob), 2)})
+            
 
             await api.log('{}: {}'.format(m, prob))
             await api.showStatus('{}: {}'.format(m, prob))

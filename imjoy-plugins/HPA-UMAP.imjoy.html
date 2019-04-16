@@ -1,0 +1,369 @@
+﻿<docs lang="markdown">
+
+
+This plugin allows to visualize results of a classification of protein 
+localization patterns from microscope images of the entire HPA cell atlas(v18, 63955 images).  
+
+Classification is performed with the winning approach of a 2018 Kaggle challenge 
+(https://www.kaggle.com/c/human-protein-atlas-image-classification). 
+
+Plots shows a UMAP projection (Uniform Manifold Approximation and Projection) calculated from the
+last layer of the network (densenet121, dimensions: 1024). Each dot is an image and when clicking on a 
+dot, the corresponding image is displayed together with information about the cell line, the 
+protein, and a link to the HPA website. The plugin also allows to search for a gene, cell line, or 
+a localization pattern.  
+
+</docs>
+
+<config lang="json">
+{
+  "name": "HPA-UMAP",
+  "type": "window",
+  "tags": [],
+  "ui": "Explore protein localization patterns in HPA images.",
+  "version": "0.2.8",
+  "api_version": "0.1.2",
+  "description": "Explore protein localization patterns in HPA images.",
+  "icon": "photo",
+  "inputs": null,
+  "outputs": null,
+  "requirements": [
+    "https://cdn.plot.ly/plotly-latest.min.js",
+    "https://unpkg.com/papaparse@latest/papaparse.min.js",
+    "https://cdn.jsdelivr.net/npm/vue@2.6.10/dist/vue.min.js",
+    "https://unpkg.com/spectre.css/dist/spectre.min.css",
+    "https://unpkg.com/spectre.css/dist/spectre-exp.min.css",
+    "https://unpkg.com/spectre.css/dist/spectre-icons.min.css"],
+  "dependencies": [],
+  "defaults": {"w": 50, "h":20}
+}
+</config>
+
+<script lang="javascript">
+function gaussianRand() {
+    var rand = 0;
+    for (var i = 0; i < 6; i += 1) {
+        rand += Math.random();
+    }
+    return (rand / 6)-0.5;
+}
+
+function transpose(data) {
+  let result = {};
+  for (let row of data) {
+    for (let [key, value] of Object.entries(row)) {
+      result[key] = result[key] || [];
+      result[key].push(value); 
+    }
+  }
+  return result;
+}
+
+const convertBase64ToFile = function (image) {
+  let mime = image.match(/data:([a-zA-Z0-9]+\/[a-zA-Z0-9-.+]+).*,.*/);  
+  if (mime && mime.length) {
+    mime = mime[1];
+  }
+
+  let ab
+  if(mime === 'image/svg+xml'){
+      const byteString = image.split(',')[1];
+      ab = decodeURIComponent(byteString)
+  }
+  else{
+      const byteString = atob(image.split(',')[1]);
+    ab = new ArrayBuffer(byteString.length);
+    const ia = new Uint8Array(ab);
+    for (let i = 0; i < byteString.length; i += 1) {
+        ia[i] = byteString.charCodeAt(i);
+    }
+  }
+  const newBlob = new Blob([ab], {
+    type: mime,
+  });
+
+  return newBlob;
+};
+
+const COLORS = [
+    '#f44336', '#e91e63', '#9c27b0', '#673ab7', '#3f51b5',
+    '#2196f3', '#03a9f4', '#00bcd4', '#009688', '#4caf50',
+    '#8bc34a', '#cddc39', '#ffeb3b', '#ffc107', '#ff9800',
+    '#ff5722', '#795548', '#9e9e9e', '#607d8b', '#d500f9',
+    '#212121', '#ff9e80', '#ff6d00', '#ffff00', '#76ff03',
+    '#00e676', '#64ffda', '#18ffff',
+]
+
+class ImJoyPlugin {
+  async setup() {
+      const self = this
+      this.store = {images: [], current_index: 0, loading: true, thumbnail: null, search_text: ''}
+      this.app = new Vue({
+        el: '#app',
+        data: this.store,
+        methods: {
+            openImage(url){
+                api.utils.openUrl(url)
+            },
+            openHPA(meta){
+                const url = 'https://www.proteinatlas.org/'+meta.gene_ensembl_id+'-'+meta.gene+'/cell/' 
+                api.utils.openUrl(url)
+            },
+            showImage(obj){
+                this.images.push(obj)
+                if(this.images.length>5){
+                    this.images.shift()
+                }
+                this.current_index = this.images.length -1
+            },
+            showThumbnail(obj){
+                this.thumbnail = obj
+            },
+            search(text){
+                self.updateUmap(self.umap_data, text)
+            },
+            async export_image(){
+                await api.showStatus('exporting as image...')
+                let url = await Plotly.toImage(self.umap_chart, {format:'png', height:2048, width:2048})
+                await api.exportFile(convertBase64ToFile(url), 'HPA_V18_UMAP_densenet121.png')
+
+                url = await Plotly.toImage(self.umap_chart, {format:'svg', height:1024, width: 1024})
+                await api.exportFile(convertBase64ToFile(url), 'HPA_V18_UMAP_densenet121.svg')
+                await api.showStatus('done')
+            }
+        }
+    })
+  }
+
+  async plot(data){
+    document.getElementById('chart').innerHTML = ''
+    const layout = {hovermode:'closest', title:'HPAv18 UMAP (model: densenet121, images: '+data[0].x.length+')', xaxis: {
+      showticklabels: false,
+      nticks: 10,
+      domain: [-10, 10],
+      range: [-10, 10]
+    },
+    yaxis: {
+      showticklabels: false,
+      nticks: 10,
+      domain: [-10, 10],
+      range: [-10, 10]
+    }}
+    this.umap_chart = await Plotly.newPlot('chart', data, layout,{responsive: true})
+    // Plotly.relayout('chart', {
+    //     width: document.getElementById('chart').clientWidth,
+    //     height: document.getElementById('chart').clientHeight
+    // })
+    
+    // let win=null;
+    document.getElementById('chart').on('plotly_click', async (data) => {
+        Plotly.relayout('chart', {
+            width: document.getElementById('chart').clientWidth,
+            height: document.getElementById('chart').clientHeight
+        })
+        for(var i=0; i < data.points.length; i++){
+            console.log('====>', data.points[i].customdata)
+            const id = data.points[i].customdata.id
+            //pts = data.points[i].customdata.gene+'\n';
+            const image_url = 'http://v18.proteinatlas.org/images/' + id.split('_')[0] + '/' + id.split('_')[1] +'_' + id.split('_')[2] + '_'+ id.split('_')[3]+ '_blue_red_green_yellow.jpg'
+            this.app.showImage({url: image_url, meta: data.points[i].customdata})
+            const thumbnail_url = 'http://v18.proteinatlas.org/images/' + id.split('_')[0] + '/' + id.split('_')[1] +'_' + id.split('_')[2] + '_'+ id.split('_')[3]+ '_blue_red_green_yellow_thumb.jpg'
+            this.app.showThumbnail({url: thumbnail_url, meta: data.points[i].customdata})
+            // try{
+            //     await win.run({name: data.points[i].customdata.location, type: 'imjoy/image', data: {src: image_url}})
+            // }
+            // catch{
+            //     win = await api.createWindow({name: data.points[i].customdata.location, type: 'imjoy/image', data: {src: image_url}})
+            //     await win.run({name: data.points[i].customdata.location, type: 'imjoy/image', data: {src: image_url}})
+            //     //api.utils.openUrl()
+            // }
+            await api.showStatus(data.points[i].customdata.gene+', '+ data.points[i].customdata['cell line'] + ', ' + data.points[i].customdata.location+ ', '+data.points[i].customdata.id)
+            const screen_width = window.innerWidth
+                || document.documentElement.clientWidth
+                || document.body.clientWidth;
+            if(screen_width<1024) window.scrollTo(0,document.body.scrollHeight);
+        }
+        //api.alert('Closest point clicked:\n\n'+pts);
+    });
+    document.getElementById('chart').on('plotly_hover', async (data) => {
+        for(var i=0; i < data.points.length; i++){
+            const id = data.points[i].customdata.id
+            const thumbnail_url = 'http://v18.proteinatlas.org/images/' + id.split('_')[0] + '/' + id.split('_')[1] +'_' + id.split('_')[2] + '_'+ id.split('_')[3]+ '_blue_red_green_yellow_thumb.jpg'
+            this.app.showThumbnail({url: thumbnail_url, meta: data.points[i].customdata})
+        }
+    });
+  }
+
+  async generateFakeData(){
+    const Xs = [], Ys = [], Meta=[], n = 100000;
+
+    for (let i = 0; i < n; i += 1) {
+        Xs.push(gaussianRand());
+        Ys.push(gaussianRand());
+        Meta.push('index: '+i)
+    }
+
+    const data = [{
+        type: "scattergl",
+        mode: "markers",
+        marker: {
+            line: {
+                width: 1,
+                color: '#404040'}
+        },
+        x: Xs,
+        y: Ys,
+        customdata: Meta
+    }]
+    return data
+  }
+  async updateUmap(table, filter){
+    filter = filter && filter.trim()
+    table = table.filter((row)=>{
+        return row.gene && (!filter || row.gene === filter || row['gene_ensembl_id'] === filter || row['cell line'] === filter || row['id'] === filter || row['location'].includes(filter) )
+    })
+    console.log('filtered: ', table)
+    
+    if(table.length<=0){
+        await api.alert('No image found.')
+        return
+    }
+    await api.showMessage(table.length + ' images found.')
+
+    const dataObj = transpose(table)
+    
+    const color_map = {}
+    for(let i=0; i<COLORS.length; i++){
+        color_map[i] = COLORS[i]
+    }
+    
+    const data = [{
+        type: "scattergl",
+        mode: "markers",
+        marker: {
+            size: 6,
+            color: dataObj.location_code.map((index)=>{
+                if(typeof index === 'string'){
+                    return '#e0e0e0d5'
+                }
+                else{
+                    return color_map[index]
+                }
+            })
+            //colorscale: 'Viridis'
+        },
+        x: dataObj.x,
+        y: dataObj.y,
+        customdata: table
+    }]
+    this.plot(data)
+  }
+  async run(my) {
+    const url = "https://dl.dropbox.com/s/ie2jn1tmtfhtylp/umap_results_fit_all_transform_all_sorted_20190415.csv"
+    Papa.parse(url, {
+        download: true,
+        header: true,
+        dynamicTyping: true,
+        skipEmptyLines: true,
+        error: (err, file, inputElem, reason)=> {
+            api.alert('Falied to load the table: ' + reason.toString())
+            this.app.loading = false
+            this.app.$forceUpdate()
+        },
+        complete: (results) => {
+
+            this.app.loading = false
+            this.app.$forceUpdate()
+            console.log('===============>', results)
+            this.umap_data = results.data
+            this.updateUmap(this.umap_data)
+        }
+    })
+    
+  }
+}
+
+api.export(new ImJoyPlugin())
+</script>
+
+<window lang="html">
+    <div id="app">
+      <header class="navbar">
+        <section class="navbar-section">
+            <a class="navbar-brand mr-2">HPA UMAP Explorer</a>
+            <button @click="export_image()" class="btn btn-link">Export</button>
+        </section>
+        <section class="navbar-section">
+            <div class="input-group input-inline">
+            <input class="form-input" type="text" v-model="search_text" @keyup.enter="search(search_text)" placeholder="search">
+            <button class="btn btn-primary input-group-btn" @click="search(search_text)">Search</button>
+            </div>
+        </section>
+        </header>
+      <div class="container">
+        <div class="loading loading-lg" v-if="loading">Loading...</div>
+        <div class="columns" v-show="!loading">
+        <div id="chart" class="column col-2"></div>
+        <div id="image-container" class="column col-2">
+         <img v-if="thumbnail" class="img-responsive rounded hpa-thumbnail" :src="thumbnail.url" :alt="thumbnail.meta.id"></img> 
+         <div v-if="images[current_index]" style="text-align: center;">
+             <br>
+            <h2>{{ images[current_index].meta.id}}</h2>
+            <p>cell line: {{images[current_index].meta['cell line']}}</p>
+            <p>gene: {{images[current_index].meta['gene']}}</p>
+            <p>location: {{images[current_index].meta['location']}}</p>
+            <button class="btn btn-primary" @click="openHPA(images[current_index].meta)">Open HPA page</button> <button class="btn" @click="openImage(images[current_index].url)"><i class="icon icon-share"></i></button>
+            
+         </div>
+         <h2 v-else>
+             <br>
+             Click on the UMAP to see the sample image.
+         </h2>
+         
+         <div class="carousel">
+            <!-- carousel locator -->
+            <input class="carousel-locator" v-for="(img, i) in images" :id="'slide-'+i" type="radio" name="carousel-radio" hidden="" v-model="current_index" :value="i" checked="">
+            
+            <!-- carousel container -->
+            <div class="carousel-container">
+                <!-- carousel item -->
+                <figure class="carousel-item" v-for="(img, i) in images">
+                    <img class="img-responsive rounded" :src="img.url" :alt="img.meta.id" @click="openImage(images[current_index].url)">
+                </figure>
+
+            </div>
+            <!-- carousel navigation -->
+            <div class="carousel-nav">
+                <label class="nav-item text-hide c-hand" v-for="(img, i) in images" :for="'slide-'+i">{{img.meta.id}}</label>
+            </div>
+         </div>
+        </div>
+    </div>
+    </div>
+    </div>
+
+</window>
+
+<style lang="css">
+ #chart{
+    width: 800px;
+    height: 800px;
+    max-width: calc( 100% + 140px );
+    margin-left: -70px;
+}
+#image-container{
+    text-align: center;
+    width: 400px;
+    height: 400px;
+    max-width: 100%;
+}
+.carousel{
+    margin: 20px;
+}
+
+.hpa-thumbnail{
+    position: absolute;
+    left: 30px;
+    top: 100px;
+}
+</style>
