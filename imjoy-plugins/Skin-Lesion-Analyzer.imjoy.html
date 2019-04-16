@@ -54,6 +54,8 @@ SKIN_CLASSES = {
 class ImJoyPlugin {
   async setup() {
 
+    api.alert('Disclaimer: this plugin is intended for academic research only and not for medical diagnostics.')
+
     // bind predict() to the button
     const predictBtn = document.getElementById('predict-btn');
     predictBtn.onclick = ()=>{
