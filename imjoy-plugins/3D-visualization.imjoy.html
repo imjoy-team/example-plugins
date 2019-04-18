@@ -1,0 +1,70 @@
+﻿
+<docs lang="markdown">
+Plugin demonstrates that 3D rendering can be readily used in ImJoy plugins. 
+
+Plugin is using [vtk-js](https://kitware.github.io/vtk-js/)
+
+Specifically, it shows the [PiecewiseGaussianWidget](https://kitware.github.io/vtk-js/examples/PiecewiseGaussianWidget.html)
+
+
+# From the documentation:
+
+**Double click**:
+* create a gaussian at that given position and height with no bias.
+    
+**Left click**:
+    * On a gaussian, that will active it so if you click on the (-) button, that will be the one removed.
+    * On a button: perform the action of the button (add or remove a selected gaussian).
+    
+**Right click**
+* delete the gaussian underneath.
+    
+**Drag**:
+* Bottom of a gaussian will adjust the width. From left to right will increase the width.
+* Middle of the gaussian will adjust the biais (x and y).
+* Top of the gaussian will adjust height.
+* Anywhere else will adjust its position.
+
+
+
+</docs>
+
+<config lang="json">
+{
+  "name": "3D visualization",
+  "type": "window",
+  "tags": [],
+  "ui": "Illustrate 3D visualization with vtk in the browser",
+  "version": "0.1.0",
+  "api_version": "0.1.2",
+  "description": "Demonstration of 3D visualization wiht vtk.",
+  "icon": "extension",
+  "inputs": null,
+  "outputs": null,
+  "dependencies": [],
+  "defaults": {"w": 30, "h":20}
+}
+</config>
+
+<script lang="javascript">
+class ImJoyPlugin {
+  setup() {
+
+  }
+  run(my) {
+    var frame = document.createElement("iframe");
+    frame.width = '100%';
+    frame.height = '100%';
+    frame.src = "https://kitware.github.io/vtk-js/examples/PiecewiseGaussianWidget/index.html";
+    var element = document.getElementById("3d_canvas");
+    element.appendChild(frame);
+  }
+}
+api.export(new ImJoyPlugin())
+</script>
+
+<window lang="html">
+
+  <div id="3d_canvas"></div>
+
+</window>
