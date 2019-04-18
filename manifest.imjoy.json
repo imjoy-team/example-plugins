@@ -5,7 +5,7 @@
  "version": "0.2.0",
  "plugins": [
   {
-   "name": "3D visualization",
+   "name": "3D-visualization",
    "type": "window",
    "tags": [],
    "ui": "Illustrate 3D visualization with vtk in the browser",
