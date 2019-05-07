@@ -21,7 +21,7 @@ a localization pattern.
   "type": "window",
   "tags": [],
   "ui": "Explore protein localization patterns in HPA images.",
-  "version": "0.2.8",
+  "version": "0.3.4",
   "api_version": "0.1.2",
   "description": "Explore protein localization patterns in HPA images.",
   "icon": "photo",
@@ -35,7 +35,8 @@ a localization pattern.
     "https://unpkg.com/spectre.css/dist/spectre-exp.min.css",
     "https://unpkg.com/spectre.css/dist/spectre-icons.min.css"],
   "dependencies": [],
-  "defaults": {"w": 50, "h":20}
+  "defaults": {"w": 50, "h":20, "fullscreen": true},
+  "cover": "https://kth.box.com/shared/static/epguk8lkho1i5wrukf5q138k2pi4n9kd.gif"
 }
 </config>
 
@@ -137,18 +138,63 @@ class ImJoyPlugin {
 
   async plot(data){
     document.getElementById('chart').innerHTML = ''
-    const layout = {hovermode:'closest', title:'HPAv18 UMAP (model: densenet121, images: '+data[0].x.length+')', xaxis: {
-      showticklabels: false,
-      nticks: 10,
-      domain: [-10, 10],
-      range: [-10, 10]
-    },
-    yaxis: {
-      showticklabels: false,
-      nticks: 10,
-      domain: [-10, 10],
-      range: [-10, 10]
-    }}
+    const updatemenus =[
+         {
+        buttons: [
+            {
+                args: [{'marker.size': 16}],
+                label:'marker size: 16',
+                method:'restyle'
+            },
+            {
+                args: [{'marker.size': 8}],
+                label:'marker size: 8',
+                method:'restyle'
+            },
+            {
+                args: [{'marker.size': 4}],
+                label:'marker size: 4',
+                method:'restyle'
+            },
+            {
+                args: [{'marker.size': 2}],
+                label:'marker size: 2',
+                method:'restyle'
+            },
+            {
+                args: [{'marker.size': 1}],
+                label:'marker size: 1',
+                method:'restyle'
+            }
+        ],
+        direction: 'down',
+        pad: {'r': 0, 't': 0},
+        showactive: true,
+        type: 'dropdown',
+        x: 0.8,
+        xanchor: 'left',
+        y: 1.05,
+        yanchor: 'top'
+        }
+    ]
+    
+    const layout = {
+        hovermode:'closest',
+        title:'HPAv18 UMAP (model: densenet121, images: '+data[0].x.length+')', xaxis: {
+        showticklabels: false,
+        nticks: 10,
+        domain: [-10, 10],
+        range: [-10, 10],
+        
+        },
+        yaxis: {
+        showticklabels: false,
+        nticks: 10,
+        domain: [-10, 10],
+        range: [-10, 10]
+        },
+        updatemenus: updatemenus
+    }
     this.umap_chart = await Plotly.newPlot('chart', data, layout,{responsive: true})
     // Plotly.relayout('chart', {
     //     width: document.getElementById('chart').clientWidth,
@@ -165,19 +211,17 @@ class ImJoyPlugin {
             console.log('====>', data.points[i].customdata)
             const id = data.points[i].customdata.id
             //pts = data.points[i].customdata.gene+'\n';
-            const image_url = 'http://v18.proteinatlas.org/images/' + id.split('_')[0] + '/' + id.split('_')[1] +'_' + id.split('_')[2] + '_'+ id.split('_')[3]+ '_blue_red_green_yellow.jpg'
-            this.app.showImage({url: image_url, meta: data.points[i].customdata})
-            const thumbnail_url = 'http://v18.proteinatlas.org/images/' + id.split('_')[0] + '/' + id.split('_')[1] +'_' + id.split('_')[2] + '_'+ id.split('_')[3]+ '_blue_red_green_yellow_thumb.jpg'
+            const image_base_url = 'https://v18.proteinatlas.org/images/' + id.split('_')[0] + '/' + id.split('_')[1] +'_' + id.split('_')[2] + '_'+ id.split('_')[3]
+            this.app.showImage({url: image_base_url+'_blue.jpg', meta: data.points[i].customdata})
+            this.app.showImage({url: image_base_url+'_red.jpg', meta: data.points[i].customdata})
+            this.app.showImage({url: image_base_url+'_green.jpg', meta: data.points[i].customdata})
+            this.app.showImage({url: image_base_url+'_yellow.jpg', meta: data.points[i].customdata})
+            this.app.showImage({url: image_base_url+'_blue_red_green.jpg', meta: data.points[i].customdata})
+           
+            const thumbnail_url = 'https://v18.proteinatlas.org/images/' + id.split('_')[0] + '/' + id.split('_')[1] +'_' + id.split('_')[2] + '_'+ id.split('_')[3]+ '_blue_red_green_yellow_thumb.jpg'
             this.app.showThumbnail({url: thumbnail_url, meta: data.points[i].customdata})
-            // try{
-            //     await win.run({name: data.points[i].customdata.location, type: 'imjoy/image', data: {src: image_url}})
-            // }
-            // catch{
-            //     win = await api.createWindow({name: data.points[i].customdata.location, type: 'imjoy/image', data: {src: image_url}})
-            //     await win.run({name: data.points[i].customdata.location, type: 'imjoy/image', data: {src: image_url}})
-            //     //api.utils.openUrl()
-            // }
-            await api.showStatus(data.points[i].customdata.gene+', '+ data.points[i].customdata['cell line'] + ', ' + data.points[i].customdata.location+ ', '+data.points[i].customdata.id)
+
+            await api.showStatus(data.points[i].customdata.gene+', '+ data.points[i].customdata['cell_line'] + ', ' + data.points[i].customdata.location+ ', '+data.points[i].customdata.id)
             const screen_width = window.innerWidth
                 || document.documentElement.clientWidth
                 || document.body.clientWidth;
@@ -188,7 +232,7 @@ class ImJoyPlugin {
     document.getElementById('chart').on('plotly_hover', async (data) => {
         for(var i=0; i < data.points.length; i++){
             const id = data.points[i].customdata.id
-            const thumbnail_url = 'http://v18.proteinatlas.org/images/' + id.split('_')[0] + '/' + id.split('_')[1] +'_' + id.split('_')[2] + '_'+ id.split('_')[3]+ '_blue_red_green_yellow_thumb.jpg'
+            const thumbnail_url = 'https://v18.proteinatlas.org/images/' + id.split('_')[0] + '/' + id.split('_')[1] +'_' + id.split('_')[2] + '_'+ id.split('_')[3]+ '_blue_red_green_yellow_thumb.jpg'
             this.app.showThumbnail({url: thumbnail_url, meta: data.points[i].customdata})
         }
     });
@@ -220,7 +264,7 @@ class ImJoyPlugin {
   async updateUmap(table, filter){
     filter = filter && filter.trim()
     table = table.filter((row)=>{
-        return row.gene && (!filter || row.gene === filter || row['gene_ensembl_id'] === filter || row['cell line'] === filter || row['id'] === filter || row['location'].includes(filter) )
+        return row.gene && (!filter || row.gene === filter || row['gene_ensembl_id'] === filter || row['cell_line'] === filter || row['id'] === filter || row['location'].includes(filter) )
     })
     console.log('filtered: ', table)
     
@@ -259,7 +303,7 @@ class ImJoyPlugin {
     this.plot(data)
   }
   async run(my) {
-    const url = "https://dl.dropbox.com/s/ie2jn1tmtfhtylp/umap_results_fit_all_transform_all_sorted_20190415.csv"
+    const url = "https://dl.dropbox.com/s/k9ekd4ff3fyjbfk/umap_results_fit_all_transform_all_sorted_20190422.csv"
     Papa.parse(url, {
         download: true,
         header: true,
@@ -309,7 +353,7 @@ api.export(new ImJoyPlugin())
          <div v-if="images[current_index]" style="text-align: center;">
              <br>
             <h2>{{ images[current_index].meta.id}}</h2>
-            <p>cell line: {{images[current_index].meta['cell line']}}</p>
+            <p>cell line: {{images[current_index].meta['cell_line']}}</p>
             <p>gene: {{images[current_index].meta['gene']}}</p>
             <p>location: {{images[current_index].meta['location']}}</p>
             <button class="btn btn-primary" @click="openHPA(images[current_index].meta)">Open HPA page</button> <button class="btn" @click="openImage(images[current_index].url)"><i class="icon icon-share"></i></button>
