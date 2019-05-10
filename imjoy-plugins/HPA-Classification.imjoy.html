@@ -21,7 +21,7 @@ Class Activation Map: https://arxiv.org/pdf/1512.04150.pdf
         "placeholder": "ShuffleNet-V2"
     }
   }],
-  "version": "0.1.14",
+  "version": "0.1.18",
   "api_version": "0.1.2",
   "url": "",
   "description": "ShuffleNetV2 for HPA.",
@@ -35,8 +35,9 @@ Class Activation Map: https://arxiv.org/pdf/1512.04150.pdf
         "https://cdn.jsdelivr.net/npm/simpleheat@0.4.0/simpleheat.min.js",
         "https://cdn.jsdelivr.net/gh/photopea/UTIF.js@4f1b10cb09e244cfd4f9631245d2231537148be7/UTIF.js"
     ],
-  "dependencies": [],
-  "defaults": {"w": 60, "h": 20}
+  "dependencies": ["https://gist.githubusercontent.com/oeway/002d18ea10062856d6691d8fa5ad35c9/raw/HPA-Image-Selection.imjoy.html"],
+  "defaults": {"w": 60, "h": 20, "standalone": true},
+  "cover": "https://dl.dropbox.com/s/87w11rqi5qq1ftb/hpa-classification-v0.1.17.gif"
 }
 </config>
 
@@ -406,6 +407,15 @@ class ImJoyPlugin {
             this.loadImage('19661/221_G2_1')
         }
         
+        const load_btn = document.getElementById('load-btn');
+        load_btn.onclick = async ()=>{
+            const w = await api.showDialog({type: 'HPA-Image-Selection', name: 'select image', data: {select_callback: (id)=>{
+                this.loadImage(id)
+                w.close()
+            }}})
+        }
+        load_btn.style.display = "none";
+
         const btn = document.getElementById('predict-btn');
         btn.onclick = async ()=>{
             console.time('predict');
@@ -419,6 +429,7 @@ class ImJoyPlugin {
         }
         btn.style.display = "none";
         await this.loadModel(model_name)
+        load_btn.style.display = "inline-block";
         btn.style.display = "inline-block";
         
         const inputLayer = this._model.getLayer('shufflenet').getLayer("input_2")
@@ -464,7 +475,7 @@ class ImJoyPlugin {
                 type: 'bar',
                 events: {
                     dataPointSelection: showCAM,
-                    dataPointMouseEnter: showCAM
+                    //dataPointMouseEnter: showCAM
                 }
             },
             plotOptions: {
@@ -737,6 +748,7 @@ api.export(new ImJoyPlugin())
 <window lang="html">
   <div style="width:100%;height:100%;text-align: center;">
     <h1 id="tf-label"></h1>
+    <button id="load-btn" class="big-button">Load New Image</button>
     <button id="predict-btn" class="big-button">Predict</button>
     <br>
     <div id="bar-container">
