@@ -17,18 +17,19 @@ the prediction will then take several minutes.
 {
   "name": "DeepBindScan",
   "type": "native-python",
-  "version": "0.2.9",
+  "version": "0.2.11",
   "api_version": "0.1.3",
-  "description": "Predict binding affinity of TF/RBP to a given sequence.",
+  "description": "[TODO: describe this plugin with one sentence.]",
   "tags": [],
-  "ui": "Predict binding affinity of TF/RBP to a given sequence.",
+  "ui": "",
   "inputs": null,
   "outputs": null,
   "flags": [],
   "icon": "extension",
   "env": "conda create -n kipoi-tf python=3.6",
   "requirements": ["conda: h5py tensorflow>=1.4 keras>=2.0.6 bioconda::pybedtools bioconda::pyfaidx numpy pandas", "pip: kipoi kipoiseq" ],
-  "dependencies": ["imjoy-team/example-plugins:SchemaIO"]
+  "dependencies": [
+  "https://gist.githubusercontent.com/oeway/291141e1429bd71670ce15709bff8298/raw/SchemaIO.imjoy.html"]
 }
 </config>
 
@@ -37,19 +38,15 @@ import kipoi
 from kipoiseq.transforms import SwapAxes, DummyAxis, Compose, OneHot, ReorderedOneHot
 import numpy as np
 import json
-
-
 class ImJoyPlugin():
     def setup(self):
         print('setup in python')
         self.Window = None
         self.prob_list = None
-
     async def run_(self, my):
         model_names = await api.getAttachment("model_names")
         model_names = [ m.strip() for m in model_names.split('\n') if m.strip() != '']
         model_types = ["'all species'"]+list(set([ "'{}'".format(m.split('/')[0]) for m in model_names]))
-
         ui = "DeepBind Model Type: {id: 'model_type', type: 'choose', options: [%s], placeholder: %s}<br>"%(','.join(model_types), model_types[0])
         alphabet_axis=1
         dummy_axis=None
@@ -60,7 +57,6 @@ class ImJoyPlugin():
                                         alphabet_axis=alphabet_axis,
                                         dummy_axis=dummy_axis)
         default_sequence = 'GGAGGCGGGAAGATGGAGGCGGTAGCTGTCACTAGGTTGGGGTTCTCCCGCGCGGGAGGCCTATGGGACTGTGTCGTGTCCTGAACAGTCGAGAGGAGCTT'
-
         ret = await api.showDialog({"ui": ui+"Input DNA sequence (length=101):<br> {id: 'input_seq', type: 'string', placeholder: '%s'}<br>"%(default_sequence)})
         if len(ret['input_seq']) <101:
             await api.alert('Sequence length should be 101')
@@ -75,7 +71,6 @@ class ImJoyPlugin():
             x = np.expand_dims(x, axis=0)
             scan_score = model.predict_on_batch(x)
             prob = 1.0/(1.0 + np.exp(-scan_score[0]))
-
             print(type(m))
             # model_name = str(m)
             model_name = m
@@ -87,27 +82,23 @@ class ImJoyPlugin():
                 show_cate = model_name.split("/")[0] + "/" + model_name.split("_")[-1]
             # show_cate = m
             json_prob_list.append({"Protein": show_cate, "position": 0, "Binding Probability": round(float(prob), 2)})
-
             await api.log('{}: {}'.format(m,prob))
             if prob>0.8:
                 results.append('{}: {}'.format(m, prob))
             await api.showStatus('{}: {}'.format(m, prob))
             await api.showProgress((i+1)/len(model_names)*100)
-
         print(json_prob_list)
         # schema1["data"][0]["values"] = [
         #     {'Protein': 'Danio_rerio/RBP/D00242.001_RNAcompete_Sf3b4', 'position': 0, 'Binding Probability': 0.4949981840170487},
         #     {'Protein': 'Danio_rerio/RBP/D00258.001_RNAcompete_Pcbp2', 'position': 0, 'Binding Probability': 0.42060869319311117},
         #     {'Protein': 'Homo_sapiens/TF/D00298.003_SELEX_ATF4', 'position': 0, 'Binding Probability': 0.6941371015041526},
         #     {'Protein': 'Homo_sapiens/TF/D00299.003_SELEX_ATF7', 'position': 0, 'Binding Probability': 0.5938085434701403}]
-
     async def run(self, my):
         model_names = await api.getAttachment("model_names")
         model_names = [m.strip() for m in model_names.split('\n') if m.strip() != '']
         model_types = ["all species"] + list(set(["{}".format(m.split('/')[0]) for m in model_names]))
         print("model_types:", model_types)
         default_sequence = 'GGAGGCGGGAAGATGGAGGCGGTAGCTGTCACTAGGTTGGGGTTCTCCCGCGCGGGAGGCCTATGGGACTGTGTCGTGTCCTGAACAGTCGAGAGGAGCTT'
-
         schema = {
             "fields": [{
                 "type": "select",
@@ -119,7 +110,6 @@ class ImJoyPlugin():
                     "inputType": "text",
                     "label": "Input DNA/RNA sequence (length=101)",
                     "model": "DNA"}]}
-
         self.Window = await api.createWindow({
             "name": 'DeepBindScan',
             "type": 'SchemaIO',
@@ -131,15 +121,18 @@ class ImJoyPlugin():
                 "model": {
                   "DNA": default_sequence,
                   "modelType": model_types[0]},
-                "callback":  {
-                    "pluginName": 'DeepBindScan',
-                    "functionName": 'show_schema_data'},
+                "callback":  self.show_schema_data,
                 "show": True,
                 "formOptions": {
                     "validateAfterLoad": True,
                     "validateAfterChanged": True},
                 "id": 0}})
                 # "callback": self.show_schema_data}})
+        self.Window.onClose(self.abort)
+
+    async def abort(self):
+        await api.showStatus('deepbind exited')
+        await api.showProgress(0)
 
     async def export_result(self, args):
         if self.prob_list is not None:
@@ -153,7 +146,6 @@ class ImJoyPlugin():
     async def show_schema_data(self, data):
         print("data:", data)
         ret = data
-
         schema1 = await api.getAttachment("schema1")
         model_names = await api.getAttachment("model_names")
         model_names = [m.strip() for m in model_names.split('\n') if m.strip() != '']
@@ -180,13 +172,9 @@ class ImJoyPlugin():
             "title": "Predicted protein binding probabilities",
             "show": True,
             "buttons": [{"name": "Export", 
-                "callback": {
-                    "pluginName": 'DeepBindScan',
-                    "functionName": 'export_result'
-                }
+                "callback": self.export_result
             }]
         })
-
         self.prob_list = []
         for i, m in enumerate(model_names):
             model = kipoi.get_model("DeepBind/" + m)
@@ -194,7 +182,6 @@ class ImJoyPlugin():
             x = np.expand_dims(x, axis=0)
             scan_score = model.predict_on_batch(x)
             prob = 1.0 / (1.0 + np.exp(-scan_score[0]))
-
             # model_name = str(m)
             model_name = m
             self.prob_list.append({"Model": model_name, "Binding Probability": prob})
@@ -215,21 +202,16 @@ class ImJoyPlugin():
                     show_cate = str(i)+"_"+model_name.split("_")[3]+"_"+model_name.split("_")[4]
                 else:
                     show_cate = str(i)+"_"+model_name.split("_")[-1]
-
             json_prob = {
                 "id": 0,
                 "data": [{"Protein": show_cate, "Binding Probability": round(float(prob), 2)}],
                 "dataName": 'table'}
             await self.Window.vega_view_insert(json_prob)
             
-
             await api.log('{}: {}'.format(m, prob))
             await api.showStatus('{}: {}'.format(m, prob))
             await api.showProgress((i + 1) / len(model_names) * 100)
-
-
 api.export(ImJoyPlugin())
-
 </script>
 
 <attachment name="schema1">
