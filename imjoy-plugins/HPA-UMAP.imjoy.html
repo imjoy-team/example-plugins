@@ -1,4 +1,4 @@
-﻿<docs lang="markdown">
+<docs lang="markdown">
 
 
 This plugin allows to visualize results of a classification of protein 
@@ -21,7 +21,7 @@ a localization pattern.
   "type": "window",
   "tags": [],
   "ui": "Explore protein localization patterns in HPA images.",
-  "version": "0.3.4",
+  "version": "0.3.5",
   "api_version": "0.1.2",
   "description": "Explore protein localization patterns in HPA images.",
   "icon": "photo",
@@ -352,10 +352,11 @@ api.export(new ImJoyPlugin())
          <img v-if="thumbnail" class="img-responsive rounded hpa-thumbnail" :src="thumbnail.url" :alt="thumbnail.meta.id"></img> 
          <div v-if="images[current_index]" style="text-align: center;">
              <br>
-            <h2>{{ images[current_index].meta.id}}</h2>
+            <h3>{{images[current_index].meta['gene']}} ({{images[current_index].meta['cell_line']}})</h3>
             <p>cell line: {{images[current_index].meta['cell_line']}}</p>
             <p>gene: {{images[current_index].meta['gene']}}</p>
             <p>location: {{images[current_index].meta['location']}}</p>
+            <p>image id: {{ images[current_index].meta.id}} </p>
             <button class="btn btn-primary" @click="openHPA(images[current_index].meta)">Open HPA page</button> <button class="btn" @click="openImage(images[current_index].url)"><i class="icon icon-share"></i></button>
             
          </div>
