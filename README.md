@@ -20,16 +20,6 @@ with specific dependencies. For these plugins we therefore provide different
 
 ## Troubleshooting
 
-For issue related to using a plugin which runs on the plugin engine, there the following basic operations can be used to resolve problem.
-
-### Reload the plugin
-![](https://dl.dropbox.com/s/rr1sh9m7mynh1mn/reload-plugin.gif)
-
-### Kill processes
-![](https://dl.dropbox.com/s/yw25p6l75t3962h/kill-plugin-process.gif)
-
-### Select Plugin Engine
-![](https://dl.dropbox.com/s/2a3lqruc7re2rid/select-engine.gif)
 
 ### Possible encountered errors and proposed solutions
 
@@ -45,3 +35,15 @@ raise RuntimeError('Could not find an available GPU after ' + str(attempts) + ' 
 RuntimeError: Could not find an available GPU after 1 attempts with 900 seconds interval.
 ```
   solution : kill plugin process which may occupying GPU and restart the plugin.
+
+For issue related to using a plugin which runs on the plugin engine, there the following basic operations can be used to resolve problem.
+
+### Reload the plugin
+![](https://dl.dropbox.com/s/rr1sh9m7mynh1mn/reload-plugin.gif)
+
+### Kill processes
+![](https://dl.dropbox.com/s/yw25p6l75t3962h/kill-plugin-process.gif)
+
+### Select Plugin Engine
+![](https://dl.dropbox.com/s/2a3lqruc7re2rid/select-engine.gif)
+
