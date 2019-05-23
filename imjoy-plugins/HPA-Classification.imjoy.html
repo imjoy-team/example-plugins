@@ -23,7 +23,7 @@ This plugin allows to predict the subcellular protein localization pattern for a
         "placeholder": "ShuffleNet-V2"
     }
   }],
-  "version": "0.1.18",
+  "version": "0.1.20",
   "api_version": "0.1.2",
   "url": "",
   "description": "ShuffleNetV2 for HPA.",
@@ -367,7 +367,7 @@ class ImJoyPlugin {
             this.loaded = true
             return this._model
         } catch (e) {
-            api.error('unable to load model from: ', url, 'error:', e)
+            api.error('unable to load model from: ', _available_models[name].url, 'error:', e)
             throw e
         }
     }
