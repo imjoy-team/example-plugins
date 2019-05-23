@@ -1,4 +1,4 @@
-﻿<docs lang="markdown">
+<docs lang="markdown">
 This plugin allows to classify 7 types of skin lesions as described in the publication 
 [The HAM10000 Dataset: A Large Collection of Multi-Source Dermatoscopic Images of Common Pigmented Skin Lesions](https://arxiv.org/abs/1803.10417)
 
@@ -21,7 +21,7 @@ https://www.kaggle.com/vbookshelf/skin-lesion-analyzer-tensorflow-js-web-app
   "type": "window",
   "tags": [],
   "ui": "A pretrained MobileNet image classifier for images of skin lesion built with Tensorflow.js",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "api_version": "0.1.2",
   "description": "A pretrained MobileNet image classifier built with Tensorflow.js",
   "icon": "extension",
@@ -165,11 +165,11 @@ class ImJoyPlugin {
     // Output results in interface
     document.getElementById("hero_title").innerHTML = 'Predictions: '
 
-    const result_string_html = `Top-1: ${predictions[0].className} (${Math.round(predictions[0].probability*100)}%) <br> Top-2: ${predictions[1].className} (${Math.round(predictions[1].probability*100)}%)`;
+    const result_string_html = `Top-1: ${predictions[0].className} (${Math.round(predictions[0].probability*1000)/10}%) <br> Top-2: ${predictions[1].className} (${Math.round(predictions[1].probability*1000)/10}%)`;
     document.getElementById("status").innerHTML = result_string_html
 
     // Output results as ImJoy alert
-    const result_string =  `Predictions: Top-1 ${predictions[0].className} (${Math.round(predictions[0].probability*100)}%); Top-2 ${predictions[1].className} (${Math.round(predictions[1].probability*100)}%);`;
+    const result_string =  `Predictions: Top-1 ${predictions[0].className} (${Math.round(predictions[0].probability*1000)/10}%); Top-2 ${predictions[1].className} (${Math.round(predictions[1].probability*1000)/10}%);`;
     api.alert(result_string)
     
   }
