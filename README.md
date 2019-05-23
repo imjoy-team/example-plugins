@@ -22,7 +22,22 @@ with specific dependencies. For these plugins we therefore provide different
 
 ### Possible encountered errors and proposed solutions
 
+* problem: Could not find an available GPU
+
+```
+<DPNUnet>: Traceback (most recent call last):
+File "/imjoy-engine/miniconda/lib/python3.6/site-packages/imjoy/worker.py", line 73, in handle_execute
+exec(content, conn.local) # pylint: disable=exec-used
+File "<string>", line 11, in <module>
+File "/imjoy-engine/miniconda/envs/dsb2018-gpu/lib/python3.6/site-packages/GPUtil/GPUtil.py", line 203, in getFirstAvailable
+raise RuntimeError('Could not find an available GPU after ' + str(attempts) + ' attempts with ' + str(interval) + ' seconds interval.')
+RuntimeError: Could not find an available GPU after 1 attempts with 900 seconds interval.
+```
+  solution : kill plugins which may occupying GPU and restart the plugin.
+
+
 ### Restart a plugin
 
 
 ### Kill processes
+![](https://dl.dropbox.com/s/yw25p6l75t3962h/kill-plugin-process.gif)
