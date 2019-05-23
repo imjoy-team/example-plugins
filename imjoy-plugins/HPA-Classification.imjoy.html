@@ -1,4 +1,4 @@
-﻿<docs>
+<docs>
 
 # ShuffleNetV2 for HPA
 
@@ -50,19 +50,19 @@ const CHANNELS = ["Microtubules", "Antibody", "Nucleus"]
 const CHANNEL_COLORS = {"Microtubules": "red", "Antibody": "green", "Nucleus": "blue"}
 const LABLES = {
 0: "Nucleoplasm",
-1: "Nuclear membrane",  
-2: "Nucleoli",  
-3: "Nucleoli fibrillar center",  
-4: "Nuclear speckles",  
-5: "Nuclear bodies", 
-6: "Endoplasmic reticulum",  
-7: "Golgi apparatus",  
-8: "Peroxisomes",  
-9: "Endosomes",  
-10: "Lysosomes",  
+1: "Nuclear membrane",
+2: "Nucleoli",
+3: "Nucleoli fibrillar center",
+4: "Nuclear speckles",
+5: "Nuclear bodies",
+6: "Endoplasmic reticulum",
+7: "Golgi apparatus",
+8: "Peroxisomes",
+9: "Endosomes",
+10: "Lysosomes",
 11: "Intermediate filaments",
-12: "Actin filaments",  
-13: "Focal adhesion sites",  
+12: "Actin filaments",
+13: "Focal adhesion sites",
 14: "Microtubules",
 15: "Microtubule ends",
 16: "Cytokinetic bridge",
@@ -73,10 +73,10 @@ const LABLES = {
 21: "Plasma membrane",
 22: "Cell junctions",
 23: "Mitochondria",
-24: "Aggresome",  
+24: "Aggresome",
 25: "Cytosol",
 26: "Cytoplasmic bodies",
-27: "Rods & rings" 
+27: "Rods & rings"
 }
 class ImJoyPlugin {
   async setup() {
@@ -97,7 +97,7 @@ class ImJoyPlugin {
                 this.mode = 'shuffle'
             }
         }
-        
+
         static get className() {
             return 'Lambda';
         }
@@ -134,7 +134,7 @@ class ImJoyPlugin {
                     return x
                 });
             }
-            
+
         }
     }
     /**
@@ -166,9 +166,9 @@ class ImJoyPlugin {
         points.push(point);
         }
         // heatmap data format
-        var data = { 
-        max: max, 
-        data: points 
+        var data = {
+        max: max,
+        data: points
         };
         // if you have a set of datapoints always use setData instead of addData
         // for data initialization
@@ -198,22 +198,22 @@ class ImJoyPlugin {
         plable.style["margin-bottom"] = "1px"
         scontainer.appendChild(plable)
         scontainer.appendChild(selected_canvas)
-        
+
         const container = document.createElement('div')
         const p = document.createElement('p')
         p.innerHTML = 'Input(RGB)'
         p.style["margin-bottom"] = "1px"
         container.appendChild(p)
         container.appendChild(canvas)
-        
-        
+
+
         this.show_selected_canvas = (image_tensor, label, is_heatmap)=> {
             if(is_heatmap){
                 const d = image_tensor.dataSync();
                 const points = []
                 const x_ratio = selected_canvas.width/image_tensor.shape[0]
                 const y_ratio = selected_canvas.height/image_tensor.shape[1]
-                
+
                 for(let x=0;x<image_tensor.shape[0];x++){
                     for(let y=0;y<image_tensor.shape[1];y++){
                         const v = d[y*image_tensor.shape[0]+x]
@@ -236,7 +236,7 @@ class ImJoyPlugin {
         this.add_select_button = (image_tensor, label, color)=>{
             color = color || "#448aff";
             const btn = document.createElement('button')
-            
+
 
             btn.innerHTML = label
             btn.style.margin= "1px"
@@ -244,7 +244,7 @@ class ImJoyPlugin {
             btn.className = "small-button"
             btn.onclick = ()=>{
                 this.show_selected_canvas(image_tensor, label)
-            } 
+            }
             btnContainer.appendChild(btn)
         }
         //show only green channel
@@ -257,15 +257,15 @@ class ImJoyPlugin {
         function drawCircle(mouseX, mouseY){
             // Clear the background
             //c.clearRect(0, 0, canvas.width, canvas.height);
-            
+
             // Establish the circle path
             c.beginPath();
             c.arc(mouseX, mouseY, radius, 0 , 2 * Math.PI, false);
-            
+
             // Fill the circle
             c.fillStyle = "rgba(255, 255, 255, 0)";
             c.fill();
-            
+
             // Outline (stroke) the circle
             c.lineWidth = 3;
             c.strokeStyle = 'white';
@@ -324,7 +324,7 @@ class ImJoyPlugin {
             const img = document.createElement('img');
             img.setAttribute('crossorigin', 'anonymous');
             img.onload = () =>
-            {   
+            {
                 const t = tf.browser.fromPixels(img, 3)
                 if(url.includes('_red.') && t.shape[2] === 3){
                     const gray_tensor = t.unstack(2)[0];
@@ -352,7 +352,7 @@ class ImJoyPlugin {
             api.log('Tensorflow.js backend:' + tf.getBackend())
             api.log('loading model: ' + url)
             // Load the model.
-            
+
             this.statusElement.innerHTML = 'Loading pretrained model...';
             console.time('load model');
             this._model = await tf.loadLayersModel(url);
@@ -389,7 +389,7 @@ class ImJoyPlugin {
         console.timeEnd('load data');
     }
     async predict(image_id){
-        
+
         this.loadImage(image_id)
         console.time('predict');
         const [predictions, labels, values] = await this.predictImg(this.currentImage)
@@ -406,7 +406,7 @@ class ImJoyPlugin {
         else{
             this.loadImage('19661/221_G2_1')
         }
-        
+
         const load_btn = document.getElementById('load-btn');
         load_btn.onclick = async ()=>{
             const w = await api.showDialog({type: 'HPA-Image-Selection', name: 'select image', data: {select_callback: (id)=>{
@@ -431,7 +431,7 @@ class ImJoyPlugin {
         await this.loadModel(model_name)
         load_btn.style.display = "inline-block";
         btn.style.display = "inline-block";
-        
+
         const inputLayer = this._model.getLayer('shufflenet').getLayer("input_2")
         const convLayer = this._model.getLayer('shufflenet').getLayer("onv5_out_1x1")
         const lastLayer = this._model.getLayer('dense_1')
@@ -451,7 +451,7 @@ class ImJoyPlugin {
             if(data[i]>0.5){
                 predictions.push(LABLES[i])
             }
-        
+
             if(data[i]>threshold){
                 labels.push(LABLES[i])
                 values.push(data[i])
@@ -460,7 +460,7 @@ class ImJoyPlugin {
         this.statusElement.innerHTML = 'Prediction: ' + predictions.join(", ")
         api.showStatus(this.statusElement.innerHTML)
         document.getElementById('bar-container').style.display = "block";
-        
+
         const showCAM = (event, chartContext, config)=>{
             var label = labels[config.dataPointIndex];
             var prob = values[config.dataPointIndex];
@@ -500,8 +500,8 @@ class ImJoyPlugin {
             options
         );
         chart.render();
-        
-        
+
+
         return [predictions, labels, values]
     }
 }
@@ -780,7 +780,7 @@ canvas {
   max-width: 50%;
   float:left;
 }
- } 
+ }
  .big-button {
   background-color: #448aff;
   border: none;
