@@ -25,11 +25,11 @@
   {
    "name": "DeepBindScan",
    "type": "native-python",
-   "version": "0.2.9",
+   "version": "0.2.11",
    "api_version": "0.1.3",
-   "description": "Predict binding affinity of TF/RBP to a given sequence.",
+   "description": "Predict binding affinity of TF/RBP to a given DNA/RNA sequence.",
    "tags": [],
-   "ui": "Predict binding affinity of TF/RBP to a given sequence.",
+   "ui": "",
    "inputs": null,
    "outputs": null,
    "flags": [],
@@ -60,7 +60,7 @@
      }
     }
    ],
-   "version": "0.1.14",
+   "version": "0.1.18",
    "api_version": "0.1.2",
    "url": "",
    "description": "ShuffleNetV2 for HPA.",
@@ -74,11 +74,15 @@
     "https://cdn.jsdelivr.net/npm/simpleheat@0.4.0/simpleheat.min.js",
     "https://cdn.jsdelivr.net/gh/photopea/UTIF.js@4f1b10cb09e244cfd4f9631245d2231537148be7/UTIF.js"
    ],
-   "dependencies": [],
+   "dependencies": [
+    "https://gist.githubusercontent.com/oeway/002d18ea10062856d6691d8fa5ad35c9/raw/HPA-Image-Selection.imjoy.html"
+   ],
    "defaults": {
     "w": 60,
-    "h": 20
+    "h": 20,
+    "standalone": true
    },
+   "cover": "https://dl.dropbox.com/s/87w11rqi5qq1ftb/hpa-classification-v0.1.17.gif",
    "uri": "imjoy-plugins/HPA-Classification.imjoy.html"
   },
   {
@@ -86,7 +90,7 @@
    "type": "window",
    "tags": [],
    "ui": "Explore protein localization patterns in HPA images.",
-   "version": "0.2.8",
+   "version": "0.3.5",
    "api_version": "0.1.2",
    "description": "Explore protein localization patterns in HPA images.",
    "icon": "photo",
@@ -103,8 +107,10 @@
    "dependencies": [],
    "defaults": {
     "w": 50,
-    "h": 20
+    "h": 20,
+    "fullscreen": true
    },
+   "cover": "https://raw.githubusercontent.com/imjoy-team/example-plugins/master/imjoy-plugins/HPA-UMAP.gif",
    "uri": "imjoy-plugins/HPA-UMAP.imjoy.html"
   },
   {
@@ -146,7 +152,7 @@
    "type": "window",
    "tags": [],
    "ui": "",
-   "version": "0.2.5",
+   "version": "0.2.6",
    "api_version": "0.1.3",
    "description": "[TODO: describe this plugin with one sentence.]",
    "icon": "extension",
