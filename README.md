@@ -17,6 +17,12 @@ with specific dependencies. For these plugins we therefore provide different
 | Windows 10 (...)         | [ ]                                                                             | [ ] | [ ] |
 | Ubuntu 16.04             | [ ]                                                                             | [ ] | [ ] |
 
-## Note
 
-The ImJoy web app will read the `manifest.imjoy.json` from this repository in order to render the plugin store list, when a new plugin file is added to the `repository` folder, run the following command to update the `manifest.imjoy.json` file:
+## Troubleshooting
+
+### Possible encountered errors and proposed solutions
+
+### Restart a plugin
+
+
+### Kill processes
