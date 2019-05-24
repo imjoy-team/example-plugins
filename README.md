@@ -20,10 +20,12 @@ with specific dependencies. For these plugins we therefore provide different
 
 ## Troubleshooting
 
+Here we list some problems you might encounter when running deep learning
+plugins, and propose solutions how solve them. Animated GIFs in the section
+"Proposed solution" illustrate how to perform the proposed actions.
 
-### Possible encountered errors and proposed solutions
-
-* problem: Could not find an available GPU
+### Problem: "Could not find an available GPU"
+This indicates that no GPU can be assigned to your computational task. 
 
 ```
 <DPNUnet>: Traceback (most recent call last):
@@ -34,9 +36,13 @@ File "/imjoy-engine/miniconda/envs/dsb2018-gpu/lib/python3.6/site-packages/GPUti
 raise RuntimeError('Could not find an available GPU after ' + str(attempts) + ' attempts with ' + str(interval) + ' seconds interval.')
 RuntimeError: Could not find an available GPU after 1 attempts with 900 seconds interval.
 ```
-  solution : kill plugin process which may occupying GPU and restart the plugin.
 
-For issue related to using a plugin which runs on the plugin engine, there the following basic operations can be used to resolve problem.
+**SOLUTION**: kill plugin processes which may occupying GPU and restart the plugin.
+
+
+## Proposed solutions
+For issue related to using a plugin which runs on the plugin engine,
+ there the following basic operations can be used to resolve problem.
 
 ### Reload the plugin
 ![](https://dl.dropbox.com/s/rr1sh9m7mynh1mn/reload-plugin.gif)
@@ -46,4 +52,3 @@ For issue related to using a plugin which runs on the plugin engine, there the f
 
 ### Select Plugin Engine
 ![](https://dl.dropbox.com/s/2a3lqruc7re2rid/select-engine.gif)
-
