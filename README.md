@@ -44,6 +44,16 @@ RuntimeError: Could not find an available GPU after 1 attempts with 900 seconds 
 For issue related to using a plugin which runs on the plugin engine,
  there the following basic operations can be used to resolve problem.
 
+### Select Plugin Engine
+Make sure that your plugin is running on the appropriate plugin engine.
+
+As an example, your ImJoy instance is connected to two engine, one running on your local
+computer `My computer` for some testing, one on a remote engine `imjoy.pasteur.cloud`.
+The plugin `DPNUnet` should run on the remote engine for some deep learning based
+cell segmentation. The GIF below shows how to select this engine for this plugin.
+
+<img src="https://dl.dropbox.com/s/2a3lqruc7re2rid/select-engine.gif" width="250" >
+
 ### Reload the plugin
 Reloading the plugin can help to reassign it correctly to a computational ressource,
 such as a remote computational cluster.
@@ -57,13 +67,3 @@ users are connected to the same engine, you may also kill the process
 of another user.
 
 <img src="https://dl.dropbox.com/s/yw25p6l75t3962h/kill-plugin-process.gif" width="250" >
-
-### Select Plugin Engine
-Make sure that your plugin is running on the appropriate plugin engine.
-
-As an example, your ImJoy instance is connected to two engine, one running on your local
-computer `My computer` for some testing, one on a remote engine `imjoy.pasteur.cloud`.
-The plugin `DPNUnet` should run on the remote engine for some deep learning based
-cell segmentation. The GIF below shows how to select this engine for this plugin.
-
-<img src="https://dl.dropbox.com/s/2a3lqruc7re2rid/select-engine.gif" width="250" >
