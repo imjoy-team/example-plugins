@@ -46,15 +46,16 @@ For issue related to using a plugin which runs on the plugin engine,
 
 ### Reload the plugin
 Reloading the plugin can help to reassign it correctly to a computational ressource,
-such as a remote computational cluster. 
-<img src="https://dl.dropbox.com/s/rr1sh9m7mynh1mn/reload-plugin.gif" width="200" >
+such as a remote computational cluster.
+
+<img src="https://dl.dropbox.com/s/rr1sh9m7mynh1mn/reload-plugin.gif" width="250" >
 
 ### Kill processes
 Below we show how you can kill a specific process on a plugin engine. If multiple
 users are connected to the same engine, make sure that you don't kill the process
 of another user.
 
-<img src="https://dl.dropbox.com/s/yw25p6l75t3962h/kill-plugin-process.gif" width="200" >
+<img src="https://dl.dropbox.com/s/yw25p6l75t3962h/kill-plugin-process.gif" width="250" >
 
 ### Select Plugin Engine
 Make sure that your plugin is running on the appropriate plugin engine.
@@ -63,4 +64,5 @@ As an example, your ImJoy instance is connected to two engine, one running on yo
 computer `My computer` for some testing, one on a remote engine `imjoy.pasteur.cloud`.
 The plugin `DPNUnet` should run on the remote engine for some deep learning based
 cell segmentation. The GIF below shows how to select this engine for this plugin.
-<img src="https://dl.dropbox.com/s/2a3lqruc7re2rid/select-engine.gif" width="200" >
+
+<img src="https://dl.dropbox.com/s/2a3lqruc7re2rid/select-engine.gif" width="250" >
