@@ -51,8 +51,9 @@ such as a remote computational cluster.
 <img src="https://dl.dropbox.com/s/rr1sh9m7mynh1mn/reload-plugin.gif" width="250" >
 
 ### Kill processes
-Below we show how you can kill a specific process on a plugin engine. If multiple
-users are connected to the same engine, make sure that you don't kill the process
+Below we show how you can kill a specific process on a plugin engine. This can be used
+to release resources such as GPU. Please use it carefully, if multiple
+users are connected to the same engine, you may also kill the process
 of another user.
 
 <img src="https://dl.dropbox.com/s/yw25p6l75t3962h/kill-plugin-process.gif" width="250" >
