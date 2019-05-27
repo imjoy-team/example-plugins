@@ -5,65 +5,46 @@ Plugin repository for ImJoy.IO, with a special focus on deep learning applicatio
 See <https://github.com/oeway/ImJoy> for more details.
 
 ## Dependencies and tags
-
 The provided deep learning plugins are built on open-source Python libraries
 with specific dependencies. For these plugins we therefore provide different
-`tags`, that allow to control which libraries are installed. Frequently, we use
-`GPU` and `CPU` to determine if the plugin is running on a CPU or GPU.
+`tags`, that allow to control which libraries are installed.
+
+Installations can depend on the **operating systems**, e.g. to account for
+differences between Windows and Linux, or on importantly which type
+of **computational hardware** the plugins are running on. Deep learning methods
+require large computational resources, e.g. training is often performed on GPUs
+rather than CPUs. For a quick primer on 'CPU vs GPU computing' see the
+dedicated section below.
+
+For the ImJoy plugins, we hence provide tags to determine if a plugin will be
+running on a GPU or CPU, and if necessary provide operating system specific tags,
+such as `CPU_Windows` for a plugin that will be using CPUs on Windows.
+
+Below we detail the operating systems and hardware configurations where the
+plugins were tested.
+
+Additional tags can be added for other configurations. For this, please
+file an issue [here](https://github.com/imjoy-team/example-plugins/issues).
 
 | Operating System         | Hardware specification                                                          | CPU | GPU |
 | ------------------------ | ------------------------------------------------------------------------------- | --- | --- |
+| Ubuntu 16.04             | Application pod running on a NVIDIA DGX-1 node, with 4 Tesla V100 GPUs          | [ ] | [X] |
 | MacOS ( Mojave 10.14.4 ) | iMac (Retina 5K, 27-inch, Late 2014), 3.5 GHz Intel Core i5,32 GB 1600 MHz DDR3 | [ ] | [ ] |
 | Windows 10 (...)         | [ ]                                                                             | [ ] | [ ] |
-| Ubuntu 16.04             | [ ]                                                                             | [ ] | [ ] |
 
 
-## Troubleshooting
+## GPU vs CPU computing
+Below we only a provide very brief overview over these two computational modes.
+More details can be found in many online tutorials, for instance [here](https://medium.com/altumea/gpu-vs-cpu-computing-what-to-choose-a9788a2370c4.)
 
-Here we list some problems you might encounter when running deep learning
-plugins, and propose solutions how solve them. Animated GIFs in the section
-"Proposed solution" illustrate how to perform the proposed actions.
-
-### Problem: "Could not find an available GPU"
-This indicates that no GPU can be assigned to your computational task.
-
-```
-<DPNUnet>: Traceback (most recent call last):
-File "/imjoy-engine/miniconda/lib/python3.6/site-packages/imjoy/worker.py", line 73, in handle_execute
-exec(content, conn.local) # pylint: disable=exec-used
-File "<string>", line 11, in <module>
-File "/imjoy-engine/miniconda/envs/dsb2018-gpu/lib/python3.6/site-packages/GPUtil/GPUtil.py", line 203, in getFirstAvailable
-raise RuntimeError('Could not find an available GPU after ' + str(attempts) + ' attempts with ' + str(interval) + ' seconds interval.')
-RuntimeError: Could not find an available GPU after 1 attempts with 900 seconds interval.
-```
-
-**SOLUTION**: kill plugin processes which may occupying GPU and restart the plugin.
-
-
-## Proposed solutions
-For issue related to using a plugin which runs on the plugin engine,
- there the following basic operations can be used to resolve problem.
-
-### Select Plugin Engine
-Make sure that your plugin is running on the appropriate plugin engine.
-
-As an example, your ImJoy instance is connected to two engine, one running on your local
-computer `My computer` for some testing, one on a remote engine `imjoy.pasteur.cloud`.
-The plugin `DPNUnet` should run on the remote engine for some deep learning based
-cell segmentation. The GIF below shows how to select this engine for this plugin.
-
-<img src="https://dl.dropbox.com/s/2a3lqruc7re2rid/select-engine.gif" width="250" >
-
-### Reload the plugin
-Reloading the plugin can help to reassign it correctly to a computational ressource,
-such as a remote computational cluster.
-
-<img src="https://dl.dropbox.com/s/rr1sh9m7mynh1mn/reload-plugin.gif" width="250" >
-
-### Kill processes
-Below we show how you can kill a specific process on a plugin engine. This can be used
-to release resources such as GPU. Please use it carefully, if multiple
-users are connected to the same engine, you may also kill the process
-of another user.
-
-<img src="https://dl.dropbox.com/s/yw25p6l75t3962h/kill-plugin-process.gif" width="250" >
+-   Training of large neural networks is frequently
+    performed on so-called **GPUs (Graphics processing unit)**. These are specialised
+    devices, which are ideally suited for training and prediction in deep learning
+    applications. Many of the open-source libraries require GPUs of Nvidia. Such a device
+    will not be available on every computer. Libraries might further depend on which
+    specific GPU will be used.
+-   As an alternative computations can be performed on the **CPU (central processing units)**,
+    which is the general purpose processing unit of every computer. Here, training is
+    often slow and in extreme cases not even possible. However, frequently trained networks
+    can be be used with a **CPU**. While every computer will have a CPU, libraries will depend
+    on the precise hardware specification and also the operating system.
