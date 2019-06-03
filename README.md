@@ -28,9 +28,8 @@ file an issue [here](https://github.com/imjoy-team/example-plugins/issues).
 
 | Operating System         | Hardware specification                                                          | CPU | GPU |
 | ------------------------ | ------------------------------------------------------------------------------- | --- | --- |
-| Ubuntu 16.04             | Application pod running on a NVIDIA DGX-1 node, with 4 Tesla V100 GPUs          | [ ] | [X] |
-| MacOS ( Mojave 10.14.4 ) | iMac (Retina 5K, 27-inch, Late 2014), 3.5 GHz Intel Core i5,32 GB 1600 MHz DDR3 | [ ] | [ ] |
-| Windows 10 (...)         | [ ]                                                                             | [ ] | [ ] |
+| Ubuntu 16.04             | Application pod running on a NVIDIA DGX-1 node, with 4 Tesla V100 GPUs          | [X] | [X] |
+| MacOS ( Mojave 10.14.4 ) | iMac (Retina 5K, 27-inch, Late 2014), 3.5 GHz Intel Core i5,32 GB 1600 MHz DDR3 | [X] | [ ] |
 
 
 ## GPU vs CPU computing
