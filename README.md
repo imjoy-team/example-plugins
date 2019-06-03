@@ -23,11 +23,31 @@ only permit GPU computations. Here, no `CPU` tag is provided.
 Additional tags can be added for other configurations. For this, please
 file an issue [here](https://github.com/imjoy-team/example-plugins/issues).
 
-| Operating System         | Hardware specification                                                          | CPU | GPU |
-| ------------------------ | ------------------------------------------------------------------------------- | --- | --- |
-| Ubuntu 16.04             | Application pod running on a NVIDIA DGX-1 node, with 4 Tesla V100 GPUs          | [X] | [X] |
-| MacOS ( Mojave 10.14.4 ) | iMac (Retina 5K, 27-inch, Late 2014), 3.5 GHz Intel Core i5,32 GB 1600 MHz DDR3 | [X] | [ ] |
+**Tested environments for the DPNUnet plugin**
 
+| Operating System         | CPU | GPU | Hardware specification                                                          |
+| ------------------------ | --- | --- | ------------------------------------------------------------------------------- |
+| Ubuntu 16.04             | [X] | [X] | Application pod running on a NVIDIA DGX-1 node, with 4 Tesla V100 GPUs          |
+| MacOS ( Mojave 10.14.4 ) | [X] | [ ] | iMac (Retina 5K, 27-inch, Late 2014), 3.5 GHz Intel Core i5,32 GB 1600 MHz DDR3 |
+| Window 10                | [ ] | [ ] | Not tested yet                                                                  |
+
+
+**Tested environments for the CARE plugin**
+
+| Operating System         | CPU | GPU | Hardware specification                                                          |
+| ------------------------ | --- | --- | ------------------------------------------------------------------------------- |
+| Ubuntu 16.04             | [X] | [X] | Application pod running on a NVIDIA DGX-1 node, with 4 Tesla V100 GPUs          |
+| MacOS ( Mojave 10.14.4 ) | [X] | [ ] | iMac (Retina 5K, 27-inch, Late 2014), 3.5 GHz Intel Core i5,32 GB 1600 MHz DDR3 |
+| Window 10                | [ ] | [ ] | Not tested yet                                                                  |
+
+
+**Tested environments for the ANNA-PALM plugin**
+
+| Operating System         | CPU | GPU | Hardware specification                                                          |
+| ------------------------ | --- | --- | ------------------------------------------------------------------------------- |
+| Ubuntu 16.04             | [X] | [X] | Application pod running on a NVIDIA DGX-1 node, with 4 Tesla V100 GPUs          |
+| MacOS ( Mojave 10.14.4 ) | [X] | [ ] | iMac (Retina 5K, 27-inch, Late 2014), 3.5 GHz Intel Core i5,32 GB 1600 MHz DDR3 |
+| Window 10                | [ ] | [ ] | Not tested yet                                                                  |
 
 ## GPU vs CPU computing
 Below we only a provide very brief overview over these two computational modes.
