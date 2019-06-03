@@ -23,7 +23,7 @@ only permit GPU computations. Here, no `CPU` tag is provided.
 Additional tags can be added for other configurations. For this, please
 file an issue [here](https://github.com/imjoy-team/example-plugins/issues).
 
-**Tested environments for the DPNUnet plugin**
+**Table 1. Tested environments for the DPNUnet plugin**
 
 | Operating System         | CPU | GPU | Hardware specification                                                          |
 | ------------------------ | --- | --- | ------------------------------------------------------------------------------- |
@@ -32,7 +32,8 @@ file an issue [here](https://github.com/imjoy-team/example-plugins/issues).
 | Window 10                | [ ] | [ ] | Not tested yet                                                                  |
 
 
-**Tested environments for the CARE plugin**
+
+**Table 2. Tested environments for the CARE plugin**
 
 | Operating System         | CPU | GPU | Hardware specification                                                          |
 | ------------------------ | --- | --- | ------------------------------------------------------------------------------- |
@@ -41,7 +42,8 @@ file an issue [here](https://github.com/imjoy-team/example-plugins/issues).
 | Window 10                | [ ] | [ ] | Not tested yet                                                                  |
 
 
-**Tested environments for the ANNA-PALM plugin**
+
+**Table 3. Tested environments for the ANNA-PALM plugin**
 
 | Operating System         | CPU | GPU | Hardware specification                                                          |
 | ------------------------ | --- | --- | ------------------------------------------------------------------------------- |
