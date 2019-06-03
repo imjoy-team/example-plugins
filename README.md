@@ -9,19 +9,16 @@ The provided deep learning plugins are built on open-source Python libraries
 with specific dependencies. For these plugins we therefore provide different
 `tags`, that allow to control which libraries are installed.
 
-Installations can depend on the **operating systems**, e.g. to account for
-differences between Windows and Linux, or on importantly which type
-of **computational hardware** the plugins are running on. Deep learning methods
-require large computational resources, e.g. training is often performed on GPUs
-rather than CPUs. For a quick primer on 'CPU vs GPU computing' see the
-dedicated section below.
+Deep learning methods require large computational resources, e.g. training is 
+often performed on GPUs rather than CPUs. For a quick primer on 'CPU vs GPU computing' 
+see the dedicated section below.
 
 For the ImJoy plugins, we hence provide tags to determine if a plugin will be
-running on a GPU or CPU, and if necessary provide operating system specific tags,
-such as `CPU_Windows` for a plugin that will be using CPUs on Windows.
+running on a GPU or CPU. Below we detail the operating systems and hardware 
+configurations where the plugins were tested.
 
-Below we detail the operating systems and hardware configurations where the
-plugins were tested.
+Some plugins, such as the `DPNUnet` are based on implementations that 
+only permit GPU computations. Here, no `CPU` tag is provided. 
 
 Additional tags can be added for other configurations. For this, please
 file an issue [here](https://github.com/imjoy-team/example-plugins/issues).
@@ -47,3 +44,9 @@ More details can be found in many online tutorials, for instance [here](https://
     often slow and in extreme cases not even possible. However, frequently trained networks
     can be be used with a **CPU**. While every computer will have a CPU, libraries will depend
     on the precise hardware specification and also the operating system.
+-   Installations can depend on the **operating systems**, e.g. to account for
+    differences between Windows and Linux. This could be accounted for by 
+    operating system specific tags, such as `CPU_Windows` for a plugin that will be using 
+    CPUs on Windows.
+  
+  
