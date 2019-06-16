@@ -23,7 +23,7 @@ This plugin allows to predict the subcellular protein localization pattern for a
         "placeholder": "ShuffleNet-V2"
     }
   }],
-  "version": "0.1.20",
+  "version": "0.1.21",
   "api_version": "0.1.2",
   "url": "",
   "description": "ShuffleNetV2 for HPA.",
@@ -37,7 +37,7 @@ This plugin allows to predict the subcellular protein localization pattern for a
         "https://cdn.jsdelivr.net/npm/simpleheat@0.4.0/simpleheat.min.js",
         "https://cdn.jsdelivr.net/gh/photopea/UTIF.js@4f1b10cb09e244cfd4f9631245d2231537148be7/UTIF.js"
     ],
-  "dependencies": ["https://gist.githubusercontent.com/oeway/002d18ea10062856d6691d8fa5ad35c9/raw/HPA-Image-Selection.imjoy.html"],
+  "dependencies": ["https://raw.githubusercontent.com/imjoy-team/example-plugins/master/imjoy-plugins/HPA-Image-Selection.imjoy.html"],
   "defaults": {"w": 60, "h": 20, "standalone": true},
   "cover": "https://dl.dropbox.com/s/87w11rqi5qq1ftb/hpa-classification-v0.1.17.gif"
 }
@@ -411,7 +411,7 @@ class ImJoyPlugin {
 
         const load_btn = document.getElementById('load-btn');
         load_btn.onclick = async ()=>{
-            const w = await api.showDialog({type: 'HPA-Image-Selection', name: 'select image', data: {select_callback: (id)=>{
+            const w = await api.showDialog({type: 'HPA-Image-Selection', title: 'Select an image from HPA', data: {select_callback: (id)=>{
                 this.loadImage(id)
                 w.close()
             }}})
@@ -759,6 +759,8 @@ api.export(new ImJoyPlugin())
     </div>
     <div id="heatmap-container"></div>
     <br>
+    <br>
+    
     <div id="select-buttons"></div>
     <div id="tf-surface"></div>
   </div>
