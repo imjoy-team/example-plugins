@@ -172,6 +172,26 @@
    "uri": "imjoy-plugins/Noise2Self.imjoy.html"
   },
   {
+   "name": "PyImageJ-Demo",
+   "type": "native-python",
+   "version": "0.1.0",
+   "api_version": "0.1.2",
+   "description": "This plugin process image with frangiVesselness function in ImageJ",
+   "tags": [],
+   "ui": "",
+   "inputs": null,
+   "outputs": null,
+   "flags": [],
+   "icon": "extension",
+   "env": "conda create -n imagej2 openjdk=8",
+   "requirements": [
+    "conda: -c conda-forge pyimagej",
+    "pip: scikit-image pillow"
+   ],
+   "dependencies": [],
+   "uri": "imjoy-plugins/PyImageJ-Demo.imjoy.html"
+  },
+  {
    "name": "SchemaIO",
    "type": "window",
    "tags": [],
