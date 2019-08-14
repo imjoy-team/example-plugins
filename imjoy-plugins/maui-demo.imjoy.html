@@ -1,0 +1,230 @@
+﻿<docs lang="markdown">
+## A demo plugin for maui
+
+maui: Multi-omics Autoencoder Integration: Deep learning-based heterogenous data analysis toolkit
+
+https://github.com/BIMSBbioinfo/maui
+
+This plugin is ported from: https://github.com/BIMSBbioinfo/maui/blob/master/vignette/maui_vignette.ipynb
+</docs>
+
+<config lang="json">
+{
+  "name": "maui-demo",
+  "type": "native-python",
+  "version": "0.1.0",
+  "description": "A domo plugin for Multi-omics Autoencoder Integration: Deep learning-based heterogenous data analysis toolkit",
+  "tags": [],
+  "ui": "",
+  "cover": "",
+  "inputs": null,
+  "outputs": null,
+  "flags": [],
+  "icon": "extension",
+  "api_version": "0.1.6",
+  "env": "conda create -n maui python=3.6",
+  "permissions": [],
+  "requirements": ["maui-tools", "scikit-learn", "pandas", "matplotlib", "seaborn==0.9.0", "lifelines==0.14.6"],
+  "dependencies": ["oeway/ImJoy-Plugins:Im2Im-Dashboard"],
+  "cover": "https://dl.dropbox.com/s/kaugiuiqc6jcjkb/manui-training.png"
+}
+</config>
+
+<script lang="python">
+
+import os
+import urllib.request
+from functools import partial
+import asyncio
+from io import BytesIO
+import base64
+
+import pandas as pd
+from sklearn import preprocessing
+from sklearn.decomposition import PCA
+
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+import matplotlib.lines as mlines
+import seaborn as sns
+import numpy as np
+from keras.callbacks import Callback
+
+import maui
+import maui.utils
+from maui.autoencoders_architectures import LadderCallback
+
+from imjoy import api
+
+from keras import backend as K
+#K.set_session(K.tf.Session(config=K.tf.ConfigProto(intra_op_parallelism_threads=1, inter_op_parallelism_threads=1)))
+
+def prepare_default_dataset():
+    os.makedirs('data', exist_ok=True)
+    if not os.path.isfile(os.path.join('data', 'cnv.csv')):
+        urllib.request.urlretrieve(
+            url='http://bimsbstatic.mdc-berlin.de/akalin/maui-data/coread_for_paper_cnv.csv',
+            filename=os.path.join('data', 'cnv.csv')
+        )
+        
+    if not os.path.isfile(os.path.join('data', 'gex.csv')):
+        urllib.request.urlretrieve(
+            url='http://bimsbstatic.mdc-berlin.de/akalin/maui-data/coread_for_paper_gex.csv',
+            filename=os.path.join('data', 'gex.csv')
+        )
+
+    if not os.path.isfile(os.path.join('data', 'mut.csv')):
+        urllib.request.urlretrieve(
+            url='http://bimsbstatic.mdc-berlin.de/akalin/maui-data/coread_for_paper_mut.csv',
+            filename=os.path.join('data', 'mut.csv')
+        )
+
+    if not os.path.isfile(os.path.join('data', 'subtypes.csv')):
+        urllib.request.urlretrieve(
+            url='http://bimsbstatic.mdc-berlin.de/akalin/maui-data/coread_for_paper_subtypes.csv',
+            filename=os.path.join('data', 'subtypes.csv')
+        )
+
+    if not os.path.isfile(os.path.join('data', 'survival.csv')):
+        urllib.request.urlretrieve(
+            url='http://bimsbstatic.mdc-berlin.de/akalin/maui-data/coread_for_paper_survival.csv',
+            filename=os.path.join('data', 'survival.csv')
+        )
+
+
+
+class UpdateUI(Callback):
+    def __init__(self, total_epoch, dash):
+        self.total_epoch = total_epoch
+        self.epoch = 0
+        self.logs = {}
+        self.dash = dash
+        self.step = 0
+
+    def on_batch_end(self, batch, logs):
+        if batch % 10 == 0:
+            self.logs = logs
+            api.showStatus('training epoch:'+str(self.epoch)+'/'+str(self.total_epoch))
+            api.log('batch:'+str(batch) + ' '+ str(logs))
+            self.dash.updateCallback('onStep', self.step, {'loss': np.asscalar(logs['loss'])})
+        self.step += 1
+    def on_epoch_end(self, epoch, logs):
+        self.epoch = epoch+1
+        self.logs = logs
+        self.dash.updateCallback('onStep', self.step, {'val_loss': np.asscalar(logs['val_loss'])})
+        api.showProgress(self.epoch/self.total_epoch*100)
+        api.showStatus('training epoch:'+str(self.epoch)+'/'+str(self.total_epoch))
+        api.log('epoch:'+str(self.epoch)+'/'+str(self.total_epoch) + ' '+ str(logs))
+
+def train_model(vae, x_train, epochs, batch_size, x_val, beta, kappa, max_beta_val, dash):
+    K.get_session().run(K.tf.global_variables_initializer())
+    cb = UpdateUI(epochs, dash)
+    hist = vae.fit(
+        np.array(x_train),
+        shuffle=True,
+        epochs=epochs,
+        verbose=0,
+        batch_size=batch_size,
+        validation_data=(np.array(x_val), None),
+        callbacks=[LadderCallback(beta, kappa, max_beta_val), cb],
+    )
+    return hist
+
+def fig2base64():
+    sio = BytesIO() 
+    plt.savefig(sio, format='png')
+    sio.seek(0)
+    img_str = base64.encodebytes(sio.getvalue()).decode()
+    imgurl = 'data:image/png;base64,' + img_str
+    return imgurl
+
+class ImJoyPlugin():
+    def setup(self):
+        prepare_default_dataset()
+
+    async def run(self, ctx):
+        cnv = pd.read_csv(os.path.join('data', 'cnv.csv'), index_col=0)
+        gex = pd.read_csv(os.path.join('data', 'gex.csv'), index_col=0)
+        mut = pd.read_csv(os.path.join('data', 'mut.csv'), index_col=0)
+        survival = pd.read_csv(os.path.join('data', 'survival.csv'), index_col=0)
+        subtypes = pd.read_csv(os.path.join('data', 'subtypes.csv'), index_col=0)
+
+        gex_tcga = maui.utils.scale(gex.loc[:,gex.columns.str.contains('TCGA')])
+        gex_ccle = maui.utils.scale(gex.loc[:,~gex.columns.str.contains('TCGA')])
+
+        gex = pd.concat([gex_tcga, gex_ccle], axis=1)
+        gex = maui.utils.scale(gex)
+
+        self.dash = await api.createWindow(type="Im2Im-Dashboard", name="Maui Training", w=25, h=20, data={"display_mode": "all", 'metrics': ['loss', 'val_loss'], 'callbacks': ['onStep']})
+        #await self.dash.setLoading({'status_text': 'Preparing data...', 'loading': True})
+
+        maui_model = maui.Maui(n_hidden=[1100], n_latent=70)
+        maui_model.training_fn = partial(
+            train_model, 
+            epochs=80,
+            batch_size=60,
+            kappa=1.0,
+            max_beta_val=1,
+            dash=self.dash
+        )
+        api.showMessage('start training')
+        
+        z = maui_model.fit_transform({'mRNA': gex, 'Mutations': mut, 'CNV': cnv})
+
+        api.showMessage('training and transformation finished, running clustering...')
+
+
+        displays = {}
+
+        y = subtypes.cms_label
+        y_cmsonly = y[y!='NOLBL']
+        y_cmsonly = y_cmsonly.loc[list(set(y_cmsonly.index) & set(gex.columns))]
+
+        cmap = dict(zip(sorted(y_cmsonly.unique()), sns.color_palette()))
+        ycols = [cmap[l] for l in y_cmsonly]
+
+        legend_handles = [mlines.Line2D([], [], color=cmap[label], label=label, marker='o',
+                                        markersize=10, linewidth=0) for label in cmap]
+
+        pcs = pd.DataFrame(PCA(2).fit_transform(z), columns=['PC1', 'PC2'], index=z.index).loc[y_cmsonly.index]
+        pcs.plot.scatter(x='PC1', y='PC2', c=ycols)
+        plt.legend(handles=legend_handles)
+        displays['latent factors representation (CMS only)'] = fig2base64()
+
+        yhat = maui_model.cluster(ami_y = y_cmsonly)
+        cmap_clusters = dict(zip(sorted(yhat.unique()), sns.color_palette()))
+        ycols_clusters = [cmap_clusters[l] for l in yhat]
+
+        legend_handles = [mlines.Line2D([], [], color=cmap_clusters[label], label=label, marker='o',
+                                        markersize=10, linewidth=0) for label in cmap_clusters]
+
+        pcs = pd.DataFrame(PCA(2).fit_transform(z), columns=['PC1', 'PC2'], index=z.index).loc[y_cmsonly.index]
+        pcs.plot.scatter(x='PC1', y='PC2', c=ycols_clusters)
+        plt.legend(handles=legend_handles)
+        displays['Clustering with maui'] = fig2base64()
+
+        api.showMessage('Predicting patient survival...')
+    
+        surv_fns = maui.utils.estimate_kaplan_meier(y_cmsonly, survival)
+        surv_fns.plot()
+        test_stat, p_value = maui.utils.multivariate_logrank_test(y_cmsonly, survival)
+        ax = plt.gca()
+        ax.text(0.1, .1, f'log-rank p={p_value:.3f}', transform=ax.transAxes, va='top', fontsize=20)
+        displays['Predict patient survival (CMS only)'] = fig2base64()
+
+        surv_fns = maui.utils.estimate_kaplan_meier(yhat, survival)
+        surv_fns.plot()
+        test_stat, p_value = maui.utils.multivariate_logrank_test(yhat, survival)
+        ax = plt.gca()
+        ax.text(0.1, .1, f'log-rank p={p_value:.3f}', transform=ax.transAxes, va='top', fontsize=20)
+
+        displays['Predict patient survival prediction with maui'] = fig2base64()
+
+        self.dash.appendDisplay('result', displays)
+
+        api.alert('all done.')
+
+
+api.export(ImJoyPlugin())
+</script>
