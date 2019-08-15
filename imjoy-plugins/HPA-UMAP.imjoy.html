@@ -21,7 +21,7 @@ a localization pattern.
   "type": "window",
   "tags": [],
   "ui": "Explore protein localization patterns in HPA images.",
-  "version": "0.3.5",
+  "version": "0.3.6",
   "api_version": "0.1.2",
   "description": "Explore protein localization patterns in HPA images.",
   "icon": "photo",
@@ -36,7 +36,7 @@ a localization pattern.
     "https://unpkg.com/spectre.css/dist/spectre-icons.min.css"],
   "dependencies": [],
   "defaults": {"w": 50, "h":20, "fullscreen": true},
-  "cover": "https://raw.githubusercontent.com/imjoy-team/example-plugins/master/imjoy-plugins/HPA-UMAP.gif"
+  "cover": "https://kth.box.com/shared/static/epguk8lkho1i5wrukf5q138k2pi4n9kd.gif"
 }
 </config>
 
@@ -90,7 +90,7 @@ const COLORS = [
     '#f44336', '#e91e63', '#9c27b0', '#673ab7', '#3f51b5',
     '#2196f3', '#03a9f4', '#00bcd4', '#009688', '#4caf50',
     '#8bc34a', '#cddc39', '#ffeb3b', '#ffc107', '#ff9800',
-    '#ff5722', '#795548', '#9e9e9e', '#607d8b', '#d500f9',
+    '#ff5722', '#795548', '#009e9e', '#607d8b', '#d500f9',
     '#212121', '#ff9e80', '#ff6d00', '#ffff00', '#76ff03',
     '#00e676', '#64ffda', '#18ffff',
 ]
@@ -187,11 +187,15 @@ class ImJoyPlugin {
         range: [-10, 10],
         
         },
+        xaxis:{
+            zeroline: false
+        },
         yaxis: {
         showticklabels: false,
         nticks: 10,
         domain: [-10, 10],
-        range: [-10, 10]
+        range: [-10, 10],
+        zeroline: false
         },
         updatemenus: updatemenus
     }
