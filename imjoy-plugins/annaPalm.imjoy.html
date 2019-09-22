@@ -1,0 +1,532 @@
+﻿
+<docs lang="markdown">
+# ANNA-PALM: deep learning massively accelerates super-resolution localization microscopy
+
+Ouyang et al., Nat. Biotechnol. 2018, doi:10.1038/nbt.4106
+
+Paper on Nature Biotechnology: https://rdcu.be/LGtc
+</docs>
+
+<config lang="json">
+{
+  "name": "ANNA-PALM",
+  "type": "native-python",
+  "version": "0.1.17",
+  "api_version": "0.1.5",
+  "description": "A plugin for training models with ANNA-PALM.",
+  "tags": ["CPU", "GPU"],
+  "ui": null,
+  "inputs": null,
+  "outputs": null,
+  "icon": null,
+  "env": {"CPU": ["conda create -n annapalm-cpu python=3.6"], "GPU": ["conda create -n annapalm-gpu python=3.6"]},
+  "requirements": {
+    "CPU": ["repo:https://github.com/imodpasteur/ANNA-PALM", "cmd:pip install -r ANNA-PALM/requirements.txt"],
+    "GPU": ["repo:https://github.com/imodpasteur/ANNA-PALM", "pip: Pillow numpy==1.15.0 scipy matplotlib scikit-image tensorflow-gpu==1.8.0 gputil==1.4.0"]
+  },
+  "dependencies": [
+      "oeway/ImJoy-Plugins:Im2Im-Dashboard",
+      "oeway/ImJoy-Plugins:launchpad",
+      "oeway/ImJoy-Plugins:Tabbed-Docs"
+  ],
+  "cover": "https://dl.dropbox.com/s/gja7uhjctell2nd/annapalm-0.1.9.gif"
+  }
+</config>
+
+<script lang="python">
+import sys
+import os
+
+sys.path.insert(0, 'ANNA-PALM')
+
+if api.TAG == 'GPU':
+    import GPUtil
+    # Set CUDA_DEVICE_ORDER so the IDs assigned by CUDA match those from nvidia-smi
+    os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
+
+    # Get the first available GPU
+    DEVICE_ID_LIST = GPUtil.getFirstAvailable()
+    api.log(f'Available GPUs: {DEVICE_ID_LIST}')
+    if len(DEVICE_ID_LIST)<= 0:
+        api.alert('No GPU available')
+        raise Exception('No GPU available')
+
+    DEVICE_ID = DEVICE_ID_LIST[0] # grab first element from list
+    api.log(f'Set GPU id to : {DEVICE_ID}')
+    # Set CUDA_VISIBLE_DEVICES to mask out all other GPUs than the first available device id
+    os.environ["CUDA_VISIBLE_DEVICES"] = str(DEVICE_ID)
+
+api.log(str(os.environ))
+
+
+import sys
+import tensorflow as tf
+from AnetLib.options.train_options import Options
+from AnetLib.models.models import create_model
+from smlm_datasets import create_data_sources
+import asyncio
+import base64
+from io import BytesIO
+from PIL import Image
+import concurrent.futures
+from imjoy import api
+
+
+default_workdir = './workdir'
+opt = Options().parse(['--workdir=./tmp_predict'])
+opt.model = 'a_net_tensorflow'
+opt.fineSize = 512
+opt.batchSize = 1
+opt.dim_ordering = 'channels_last'
+opt.display_freq = 500
+opt.use_resize_conv = True
+opt.norm_A = 'mean_std'
+opt.norm_B = 'min_max[0,1]'
+opt.lambda_A = 50
+opt.input_nc = 2
+opt.lr_nc = 1
+opt.lr_scale = 1.0/4.0
+opt.lambda_LR = 0
+opt.control_nc = 1
+opt.add_data_type_control = True
+opt.add_lr_channel = 'pseudo'
+opt.print_freq = 3
+opt.display_freq = 1
+
+if tf.test.gpu_device_name():
+    api.log('Default GPU Devices: {}'.format(tf.test.gpu_device_name()))
+else:
+    api.log("No GPU device is avilable")
+    if api.TAG == 'GPU':
+        api.alert('No GPU device is avilable')
+
+if os.path.exists('/imjoy/imjoy-examples'):
+    ROOT_DIR = '/imjoy/imjoy-examples'
+else:
+    ROOT_DIR = ''
+
+class ImJoyPlugin():
+  async def setup(self):
+    self.step = 0
+    self.dialog = None
+    #self.executor = concurrent.futures.ThreadPoolExecutor(
+    #    max_workers=3,
+    #)
+    self.model = None
+
+  def resume(self):
+    api.alert('plugin process resumed')
+
+  async def run(self, my):
+    self.dialog = await api.showDialog(type='launchpad', data= [
+            {'name': 'Load trained model', 'description': 'Load a pre-trained model', 'callback': self.load_model, 'img': 'https://img.icons8.com/ios-glyphs/48/000000/submit-progress.png'},
+            #{'name': 'Train: simulated microtubules', 'description': 'Start training on simulated microtubules', 'callback': self.train_sim_tubulin, 'img': 'https://img.icons8.com/color/100/000000/gears.png'},
+            #{'name': 'Predict: simulated microtubules', 'description': 'Predict simulated microtubule', 'callback': self.predict_sim_tubulin, 'img': 'https://img.icons8.com/color/96/000000/double-right.png'},
+            {'name': 'Train ANNA-PALM', 'description': 'Start training on experimental data,', 'callback': self.train_csv, 'img': 'https://img.icons8.com/bubbles/100/000000/gears.png'},
+            {'name': 'Predict with ANNA-PALM', 'description': 'Predict experimental data.', 'callback': self.predict_csv, 'img': 'https://img.icons8.com/bubbles/100/000000/circled-chevron-right.png'},
+            {'name': 'Documentation', 'description': 'Show documentation.', 'callback': self.show_docs, 'img': 'https://img.icons8.com/color/96/000000/help.png'},
+        ]
+    )
+
+  async def show_docs(self):
+    self.dialog.close()
+    try:
+        await this.win_docs.run({'data': {}})
+    except:
+        self.win_docs = await api.createWindow({
+                    'name': 'Documentation - ANNA-PALM',
+                    'type': 'Tabbed-Docs',
+                    'w':30, 'h':20,
+                    'data': {
+                        'tabs': [
+                            {'name': 'Summary', 'content': await api.getAttachment('summary')},
+                            {'name': 'Model', 'content': await api.getAttachment('load-model')},
+                            {'name': 'Training', 'content': await api.getAttachment('training')},
+                            {'name': 'Prediction', 'content': await api.getAttachment('prediction')},
+                            {'name': 'FAQ', 'content': await api.getAttachment('faq')}
+                        ]
+                    }
+            })
+
+        #this.win_docs = await api.createWindow({'name': 'Documentation - ANNA-PALM','type': 'ANNA-PALM-docs','w':30, 'h':20,'data': {} })
+
+  def abort(self):
+    self.__abort = True
+
+  async def load_model(self):
+    if self.dialog is not None:
+        self.dialog.close()
+
+    workdirObj = await api.showFileDialog(type='directory', title="Please select your model folder (typically named `__model__`)", root=os.path.join(ROOT_DIR, "ANNA-PALM-MODELS"), engine=api.ENGINE_URL)
+
+    if workdirObj:
+        try:
+            api.showStatus('Please wait, loading ANNA-PALM model ...')
+            opt.load_dir = workdirObj.path
+            self.model = create_model(opt)
+            api.showStatus('ANNA-PALM model loaded!')
+            return self.model
+        except Exception as e:
+            api.showStatus('Failed to load model.')
+            await api.alert('Failed to load model, error: ' + str(e))
+            raise
+    else:
+        return None
+
+  async def train_sim_tubulin(self):
+    if self.dialog is not None:
+        self.dialog.close()
+    opt.add_lr_channel = 'pseudo'
+    opt.batchSize = 1
+    opt.phase = 'train'
+    self.dash = await api.createWindow(type="Im2Im-Dashboard", name="ANNA-PALM Training", w=25, h=20, data={'display_mode':'one','metrics': ["discrim_loss", "gen_loss_GAN", "gen_loss", "gen_loss_L2", "gen_loss_SSIM", "squirrel_discrim_loss", "gen_loss_squirrel"], 'callbacks': ['onEpochEnd', 'onBatchEnd']})
+    self.dash.onClose(self.abort)
+    await self.dash.setLoading({'status_text': 'Preparing data...', 'loading': True})
+    sources = create_data_sources(['TransformedTubulin001NB'], opt)
+    d = sources['train']
+
+    await self.dash.setLoading({'status_text': 'Start Training...', 'loading': True})
+    await self.train(d, opt, model=self.model)
+    #self.loop = asyncio.get_event_loop()
+    #await asyncio.get_event_loop().run_in_executor(self.executor, self.train, d, opt)
+
+  async def predict_sim_tubulin(self):
+    if self.dialog is not None:
+        self.dialog.close()
+    opt.batchSize = 1
+    opt.phase = 'test'
+    opt.add_lr_channel = False
+
+    workdirObj = await api.showFileDialog(type='directory', title="Please select your data folder (contains `train` subfolder)")
+    opt.workdir = workdirObj.path
+
+
+    self.dash = await api.createWindow(type="Im2Im-Dashboard", name="ANNA-PALM Prediction", w=25, h=20, data={'display_mode':'one'})
+    self.dash.onClose(self.abort)
+    await self.dash.setLoading({'status_text': 'Preparing data...', 'loading': True})
+    sources = create_data_sources(['TransformedTubulin001NB'], opt)
+    d = sources['test']
+    await self.dash.setLoading({'status_text': 'Start testing...', 'loading': True})
+    await self.predict(d, opt, self.model)
+
+
+  async def predict_csv(self):
+    if self.dialog is not None:
+        self.dialog.close()
+    opt.batchSize = 1
+    opt.phase = 'test'
+    opt.add_lr_channel = False
+
+    if self.model is None:
+        self.model = await self.load_model()
+        if self.model is None:
+            api.alert('Model is not selected, prediction aborted.')
+
+    workdirObj = await api.showFileDialog(type='directory', title="Please select your data folder for prediction.",root=os.path.join(ROOT_DIR, "ANNA-PALM-DATA"), engine=api.ENGINE_URL)
+    opt.workdir = workdirObj.path
+
+    self.dash = await api.createWindow(type="Im2Im-Dashboard", name="ANNA-PALM Prediction", w=25, h=20, data={'display_mode':'one'})
+    self.dash.onClose(self.abort)
+    api.showStatus('preparing data from ' + workdirObj.path)
+    sources = create_data_sources(['TransformedCSVImages'], opt)
+    d = sources['test']
+    try:
+        await self.dash.setLoading({'status_text': 'Start testing...', 'loading': True})
+        await self.predict(d, opt, self.model)
+    except Exception as e:
+        api.alert('Failed to perform prediction, error: ' + str(e))
+        raise
+    finally:
+        await self.dash.setLoading({'status_text': 'Error occured', 'loading': False})
+
+  async def train_csv(self):
+    if self.dialog is not None:
+        self.dialog.close()
+    opt.batchSize = 1
+    workdirObj = await api.showFileDialog(type='directory', title="Please select your data folder (contains `train` subfolder)",root=os.path.join(ROOT_DIR, "ANNA-PALM-DATA"), engine=api.ENGINE_URL)
+    opt.workdir = workdirObj.path
+    api.showStatus('preparing data from ' + workdirObj.path)
+    self.dash = await api.createWindow(type="Im2Im-Dashboard", name="ANNA-PALM Training", w=25, h=20, data={'display_mode':'one','metrics': ["discrim_loss", "gen_loss_GAN", "gen_loss", "gen_loss_L2", "gen_loss_SSIM", "squirrel_discrim_loss", "gen_loss_squirrel"], 'callbacks': ['onEpochEnd', 'onBatchEnd']})
+    self.dash.onClose(self.abort)
+    await self.dash.setLoading({'status_text': 'Preparing data...', 'loading': True})
+    sources = create_data_sources(['TransformedCSVImages'], opt)
+    d = sources['train']
+    try:
+        await self.dash.setLoading({'status_text': 'Start Training...', 'loading': True})
+        await self.train(d, opt, model=self.model)
+    except Exception as e:
+        api.alert('Failed to perform training, error: ' + str(e))
+        raise
+    finally:
+        await self.dash.setLoading({'status_text': 'Error occured', 'loading': False})
+
+  def sendImages(self, images):
+    displays = {}
+    for k, v in images.items():
+        if 'lr_' in k:
+            continue
+        for b in range(v.shape[0]):
+            ima = v[b]
+            channels = ima.shape[2]
+            for i in range(channels):
+                im = ima[:, :, i]
+                im = Image.fromarray((im/im.max()*255).astype('uint8'))
+                buffered = BytesIO()
+                im.save(buffered, format="JPEG")
+                img_str = base64.b64encode(buffered.getvalue()).decode('ascii')
+                imgurl = 'data:image/png;base64,' + img_str
+                name = k
+                if v.shape[0]>1:
+                    name += '_b'+str(b)
+                if channels>1:
+                    name += '_c'+str(i)
+                displays[name] = imgurl
+                # api.createWindow(name=str(k)+str(b)+str(i) , type='imjoy/image', w=12, h=15, data={"src": imgurl})
+    self.dash.appendDisplay('Step ' + str(self.step), displays)
+
+  async def train(self, dataset, opt, steps=1000, model=None):
+    #asyncio.set_event_loop(self.loop)
+    self.__abort = False
+
+    api.showStatus('start training...')
+    if model is None:
+        model = create_model(opt)
+    self.step = 0
+    def step_callback(model, details):
+        self.step += 1
+        if self.step<3:
+            self.dash.setLoading({'status_text': 'Start Training...', 'loading': False})
+        try:
+            if 'display' in details:
+                images = details['display']
+                del details['display']
+                self.sendImages(images)
+            api.showStatus('training: ' + str(details))
+            api.log(str(details))
+            api.progress(self.step/steps)
+            print(details)
+            self.dash.updateCallback('onEpochEnd', self.step, details)
+            print(str(details))
+            sys.stdout.flush()
+        except:
+            print('step callback error')
+        if self.__abort:
+            return 'stop'
+
+    model.train(dataset, step_callback=step_callback, verbose=1, max_steps=steps)
+
+  async def predict(self, dataset, opt, model=None):
+    if model is None:
+        model = await self.load_model()
+        #model = create_model(opt)
+        if model is None:
+            api.alert('Model is not selected, prediction aborted.')
+
+    self.step = 0
+    def step_callback(model, details):
+        self.step += 1
+        if self.step<3:
+            self.dash.setLoading({'status_text': 'Start prediction...', 'loading': False})
+        try:
+            if 'display' in details:
+                images = details['display']
+                del details['display']
+                self.sendImages(images)
+            api.showStatus('predicting: ' + str(details))
+            print(str(details))
+            api.log(str(details))
+            sys.stdout.flush()
+        except:
+            print('step callback error')
+    model.predict(dataset, step_callback=step_callback, verbose=1)
+
+api.export(ImJoyPlugin())
+</script>
+
+<attachment name="summary">
+<br>
+<p id="summary">
+  This plugin implements ANNA-PALM, which uses deep learning to reconstruct super-resolution
+  views from sparse, rapidly acquired localization images and/or widefield images.
+ </p>
+
+More details about ANNA-PALM can be found here:
+
+* **Publication**: Ouyang et. al, <a onclick="api.utils.openUrl('https://www.nature.com/articles/nbt.4106')">Deep learning massively accelerates super-resolution localization microscopy</a>,
+Nature Biotechnology, 2018
+* **GitHub**: <a onclick="api.utils.openUrl('https://github.com/imodpasteur/ANNA-PALM')">https://github.com/imodpasteur/ANNA-PALM</a>
+
+Here, we provide workflows to train and use ANNA-PALM to reconstruct super-resolution views from sparse localization and widefield images.
+We further provide example data for PALM experiments performed on microtubules.
+
+<figure>
+    <img src="https://www.dropbox.com/s/4a0f9h8i0svf3h2/anna-palm-example.png?dl=1" width="700" class="img-responsive p-centered" alt="anna-palm-reconstruction">
+    <figcaption>Example of ANNA-PALM reconstruction: (left) input = sparse localization image, (right) output = predicted super-resolution image.</figcaption>
+</figure>
+
+## Installing the plugin and main features
+
+If you don't already have the plugin, you can install it from this <a onclick="api.utils.openUrl('https://imjoy.io/#/app?w=care&plugin=oeway/ImJoy-Plugins:ANNA-PALM@GPU')">**link.**</a>
+
+When starting the ANNA-PALM plugin, you will see a **central launch pad** allowing to select the task to be performed:
+
+<figure>
+    <img src="https://www.dropbox.com/s/ahpjey8fs7flz7q/anna-palm-launchpad.png?dl=1" class="img-responsive p-centered" alt="anna-palm-launchpad">
+    <figcaption>ANNA-PALM plugin launchpad.</figcaption>
+</figure>
+
+The **main features** are:
+* Training can be performed either on a provided remote plugin engine or a local plugin engine.
+* Trained model can be loaded and used for prediction or re-training of both simulations and experimental data.
+* Prediction can be performed once the model is trained.
+
+</attachment>
+
+<attachment name="load-model">
+<br>
+<p style="color:#FF0000"> FOR IMJOY REVIEWERS: if you use the provided remote-engine, a pre-trained model is available at`imjoy/imjoy-examples/ANNA-PALM-MODEL`.</p>
+<br>
+<p>
+Here we describe how to load a pre-trained model that can be used either directly for prediction or for re-training.
+</p>
+
+## Trained model for microtubulins
+A pre-trained model for microtubulins is available <a onclick="api.utils.openUrl('https://www.dropbox.com/sh/0ze0iq1pkxntszc/AADpXGwkRu894f4idjoNCEpSa?dl=0')">**here**.</a>
+1. The actual model is contained in the folder `__model__`.
+2. After downloading, you can load the trained model to the plugin engine (See FAQ for how to load data on the engine).
+
+## Load model into ANNA-PALM plugin
+Pressing the button `Load trained model` will open a file-dialog where you can select
+a model that is stored on the plugin engine on which the plugin is running.
+
+This model is then available either for re-training or prediction.
+
+</attachment>
+
+
+<attachment name="training">
+<br>
+<p style="color:#FF0000"> FOR IMJOY REVIEWERS: for immediating testing, you can use the provided remote engine 'imjoy.pasteur.cloud' with the 'GPU' tag.
+  Further, training data for microtubules is already available at 'imjoy/imjoy-examples/ANNA-PALM-DATA'.
+</p>
+<br>
+<p id="training">
+Here we describe how to select a plugin engine, a computational environment, and the training data to perform training.
+</p>
+
+## Training data
+* Training data consist of widefield and dense PALM/STORM images. The localization data must be
+provided using the csv format of ThunderSTORM. These data pairs have the same filename, except the extension.
+Training data will then be performed on sub-sampled PALM/STORM images.
+* Training and validation data are in separate folders 'train' and 'test'.
+
+Training data (the folder containing subfolder 'train' and 'test') has to be loaded onto
+the plugin engine, where the ANNA-PALM plugin is running. See FAQ for how to load data
+on the engine.
+
+Experimental test data is available <a onclick="api.utils.openUrl('https://www.dropbox.com/sh/x6iy0gb928lk956/AADPLbIgsLaF8QcvnmX7qt72a?dl=0')">**here**.</a>
+
+The provided example data for the microtubules looks like this:
+
+```
+├─ experimental_microtubules/
+│  ├─ test/
+│  │  ├─ Ctrl-lowDens_pos2.csv
+│  │  ├─ Ctrl-lowDens_pos2.png
+│  ├─ train/
+│  │  ├─ Ctrl-lowDens_pos08.csv
+│  │  ├─ Ctrl-lowDens_pos08.png
+│  │  ├─ Ctrl-lowDens_pos10.csv
+│  │  ├─ Ctrl-lowDens_pos10.png
+│  │  ├─ ...
+```
+
+## Where to perform training: plugin engine
+Training is performed on an ImJoy plugin engine, which can either run remotely or on your
+own local workstation. To install a local plugin engine, please follow
+<a onclick="api.utils.openUrl('https://github.com/oeway/ImJoy-App/releases')">**these instructions.**</a>
+Once your ImJoy app is connected to one (or more) plugin engine(s), you can choose on which engine the CARE
+plugin should run. For this press on the icon next to the plugin name in the plugin menu.
+
+<figure>
+    <img src="https://www.dropbox.com/s/mad93spddwgwpif/anna-palm-plugin-entry.png?dl=1" width="350" class="img-responsive p-centered" alt="screen-shot-care">
+    <figcaption>ANNA-PALM plugin in the plugin menu.</figcaption>
+</figure>
+This will show a dropdown menu, where you can determine how and where the plugin is running.
+In the lower part of the dropdown menu you can then choose on which of the the available plugin engines the plugin should run.
+<figure>
+    <img src="https://www.dropbox.com/s/6pb5nzflveo71h5/anna-palm-plugin-engines.png?dl=1" width="200" class="img-responsive p-centered" alt="plugin-engines">
+    <figcaption>Choosing the plugin engine.</figcaption>
+</figure>
+
+## GPU or CPU computation
+Training can be performed on CPUs or GPUs. The latter is substantially faster. To switch
+between these computational modes, you can select the corresponding "tag". Currently supported are
+<figure>
+    <img src="https://www.dropbox.com/s/ibbeoefj8pcixv1/anna-palm-plugin-tags.png?dl=1" width="150" class="img-responsive p-centered" alt="tags">
+    <figcaption>Choosing between GPU and CPU computing.</figcaption>
+</figure>
+
+## Monitoring training progress
+Once training data is provided, the training a dashboard will be shown that allows to inspect training progress.
+* In the upper part the dashboard shows the loss functions for the training and validation data. You can hoover
+over the curves to see the current value and what loss function it is. The slider allows you to scroll through the different training steps and inspect how the quality
+ of the prediction changes.
+
+<figure>
+    <img src="https://www.dropbox.com/s/2zn1t6mnognavst/anna-palm-loss.png?dl=1" width="500" class="img-responsive  p-centered" alt="training-loss">
+    <figcaption>Transferring training data to the plugin engine.</figcaption>
+</figure>
+
+* In the lower part it shows the prediction results on a randomly selected image.
+ 'A' stands for sparse (input image), 'B' for high-resolution image. The following images are shown
+    - real_A: sparse input image
+    - real_B: high-resolution target image
+    - reco_B: reconstructed high-resolution image
+    - squirrel_error_map: error map calculate with the squirrel approach
+
+If you want to **terminate the training** click on the icon next to the plugin name,
+select `Terminate` and then close the window with the red x.
+
+## Trained model
+Once training is finished, the trained model can be used for prediction.
+
+</attachment>
+
+<attachment name="prediction">
+To predict an image, you can either load a pre-trained model into the engine, or
+train a new model. For either option, we refer to the dedicated sections in this documentation.
+
+
+1. Press on `Predict`. This will then use either the loaded model, or (if available) the newly trained one.
+2. Specify the folder the data you want to predict (it must contain a 'test' subfolder), e.g. the folder of the provided example data
+3. This will then open a new interface, where progress on prediction is reported.
+   The plugin will use the data in the 'test' folder.
+   It will create 30 different samples, by sub-sampling with vastly different framenumbers
+5. Once prediction is finished, you can scroll throught these data. 'Step' corresponds to one
+ created data-set.
+
+<figure>
+    <img src="https://www.dropbox.com/s/1hs0jemw183jg9r/anna-palm-prediction.png?dl=1" class="img-responsive p-centered" alt="screen-shot-care">
+    <figcaption>ANNA-PALM prediction interface.</figcaption>
+</figure>
+
+</attachment>
+
+<attachment name="faq">
+Here we provide answer to frequenty asked questions and encountered problems.
+
+## How can I load data or a model into the plugin engine?
+You can simply drag and drop a folder containing either training data or model:
+
+1. In ImJOy, press `Files`, and `Open Engine File`.
+2. If ImJoy is connected to multiple plugin engines, select the one where ANNA-PALM plugin is running in the upper part of the interface.
+3. Navigate to the folder where you want to store your data.
+4. Drag & drop the folder from Finder (MacOS) or Explorer (WIN) into the ImJoy file dialog.
+
+<figure>
+    <img src="https://www.dropbox.com/s/6dih56s3buf4y48/anna-palm-load-model-to-engine.gif?dl=1" width="700" class="img-responsive p-centered" alt="load-model-into-engine">
+    <figcaption>Load a pre-trained model on a plugin engine.</figcaption>
+</figure>
+
+</attachment>

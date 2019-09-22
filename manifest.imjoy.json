@@ -23,6 +23,55 @@
    "uri": "imjoy-plugins/3D-visualization.imjoy.html"
   },
   {
+   "name": "DPNUnet",
+   "type": "native-python",
+   "version": "0.2.9",
+   "description": "Nuclei segmentation with deep learning.",
+   "tags": [
+    "GPU"
+   ],
+   "ui": "",
+   "cover": "https://dl.dropbox.com/s/37aevx965do8qwh/DPN-Unet-v0.2.2.png",
+   "inputs": null,
+   "outputs": null,
+   "flags": [],
+   "icon": "extension",
+   "api_version": "0.1.5",
+   "env": {
+    "CPU": [
+     "conda create -n dsb2018-cpu python=3.6.8"
+    ],
+    "GPU": [
+     "conda create -n dsb2018-gpu python=3.6.8"
+    ]
+   },
+   "requirements": {
+    "CPU": [
+     "pip: descartes palettable geojson read-roi gputil namedlist",
+     "pip: lightgbm imgaug pandas imageio",
+     "conda: opencv tqdm scipy=1.0.0",
+     "conda: pytorch=0.4.1 torchvision==0.2.0 -c pytorch",
+     "pip: tensorboardX",
+     "repo: https://github.com/oeway/DPNUnet-Segmentation"
+    ],
+    "GPU": [
+     "pip: descartes palettable geojson read-roi gputil namedlist",
+     "pip: lightgbm imgaug pandas imageio",
+     "conda: opencv tqdm scipy=1.0.0",
+     "conda: pytorch=0.4.1 torchvision==0.2.0 cuda90 -c pytorch",
+     "pip: tensorboardX",
+     "repo: https://github.com/oeway/DPNUnet-Segmentation"
+    ]
+   },
+   "dependencies": [
+    "oeway/ImJoy-Plugins:Im2Im-Dashboard",
+    "oeway/ImJoy-Plugins:ImageAnnotator",
+    "oeway/ImJoy-Plugins:launchpad",
+    "oeway/ImJoy-Plugins:Tabbed-Docs"
+   ],
+   "uri": "imjoy-plugins/DPNUnet.imjoy.html"
+  },
+  {
    "name": "DeepBindScan",
    "type": "native-python",
    "version": "0.2.14",
@@ -114,7 +163,7 @@
    "type": "window",
    "tags": [],
    "ui": "Explore protein localization patterns in HPA images.",
-   "version": "0.3.5",
+   "version": "0.3.6",
    "api_version": "0.1.2",
    "description": "Explore protein localization patterns in HPA images.",
    "icon": "photo",
@@ -134,8 +183,49 @@
     "h": 20,
     "fullscreen": true
    },
-   "cover": "https://raw.githubusercontent.com/imjoy-team/example-plugins/master/imjoy-plugins/HPA-UMAP.gif",
+   "cover": "https://kth.box.com/shared/static/epguk8lkho1i5wrukf5q138k2pi4n9kd.gif",
    "uri": "imjoy-plugins/HPA-UMAP.imjoy.html"
+  },
+  {
+   "name": "ImageAnnotator",
+   "type": "window",
+   "tags": [],
+   "ui": "",
+   "version": "0.5.73",
+   "api_version": "0.1.5",
+   "description": "An image annotator made with OpenLayers",
+   "icon": "extension",
+   "inputs": null,
+   "outputs": null,
+   "env": "",
+   "requirements": [
+    "https://cdn.jsdelivr.net/npm/vue@2.6.10/dist/vue.min.js",
+    "https://cdn.jsdelivr.net/npm/openlayers@4.6.5/css/ol.css",
+    "https://cdn.jsdelivr.net/npm/openlayers@4.6.5/dist/ol.min.js",
+    "https://static.imjoy.io/spectre.css/spectre.min.css",
+    "https://static.imjoy.io/spectre.css/spectre-exp.min.css",
+    "https://static.imjoy.io/spectre.css/spectre-icons.min.css",
+    "https://cdnjs.cloudflare.com/ajax/libs/noUiSlider/13.1.5/nouislider.min.css",
+    "https://cdnjs.cloudflare.com/ajax/libs/noUiSlider/13.1.5/nouislider.min.js",
+    "https://cdnjs.cloudflare.com/ajax/libs/pako/1.0.10/pako.min.js",
+    "https://cdnjs.cloudflare.com/ajax/libs/upng-js/2.1.0/UPNG.min.js",
+    "https://cdnjs.cloudflare.com/ajax/libs/jszip/3.2.0/jszip.min.js",
+    "https://use.fontawesome.com/releases/v5.8.2/css/all.css",
+    "cache:https://use.fontawesome.com/releases/v5.8.2/webfonts/fa-solid-900.woff2",
+    "cache:https://www.proteinatlas.org/images/19661/221_G2_1_blue_red_green.jpg",
+    "cache:https://www.proteinatlas.org/images/19663/395_C4_2_blue_red_green.jpg"
+   ],
+   "dependencies": [
+    "oeway/ImJoy-Plugins:ImageSelection",
+    "oeway/ImJoy-Plugins:Tif File Importer"
+   ],
+   "defaults": {
+    "w": 35,
+    "h": 25,
+    "fullscreen": true
+   },
+   "cover": "https://dl.dropbox.com/s/hmoio1d62vuvito/annotator-v0.5.40.gif",
+   "uri": "imjoy-plugins/ImageAnnotator.imjoy.html"
   },
   {
    "name": "Noise2Self",
@@ -243,6 +333,46 @@
     "h": 20
    },
    "uri": "imjoy-plugins/Skin-Lesion-Analyzer.imjoy.html"
+  },
+  {
+   "name": "ANNA-PALM",
+   "type": "native-python",
+   "version": "0.1.17",
+   "api_version": "0.1.5",
+   "description": "A plugin for training models with ANNA-PALM.",
+   "tags": [
+    "CPU",
+    "GPU"
+   ],
+   "ui": null,
+   "inputs": null,
+   "outputs": null,
+   "icon": null,
+   "env": {
+    "CPU": [
+     "conda create -n annapalm-cpu python=3.6"
+    ],
+    "GPU": [
+     "conda create -n annapalm-gpu python=3.6"
+    ]
+   },
+   "requirements": {
+    "CPU": [
+     "repo:https://github.com/imodpasteur/ANNA-PALM",
+     "cmd:pip install -r ANNA-PALM/requirements.txt"
+    ],
+    "GPU": [
+     "repo:https://github.com/imodpasteur/ANNA-PALM",
+     "pip: Pillow numpy==1.15.0 scipy matplotlib scikit-image tensorflow-gpu==1.8.0 gputil==1.4.0"
+    ]
+   },
+   "dependencies": [
+    "oeway/ImJoy-Plugins:Im2Im-Dashboard",
+    "oeway/ImJoy-Plugins:launchpad",
+    "oeway/ImJoy-Plugins:Tabbed-Docs"
+   ],
+   "cover": "https://dl.dropbox.com/s/gja7uhjctell2nd/annapalm-0.1.9.gif",
+   "uri": "imjoy-plugins/annaPalm.imjoy.html"
   },
   {
    "name": "maui-demo",

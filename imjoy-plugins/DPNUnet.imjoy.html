@@ -1,0 +1,926 @@
+<docs lang="markdown">
+Plugin framework for nuclear segmentation based on the winning approach (DPNUnet) of the 2018 Kaggle Data Science Bowl.
+
+Plugins for annotation, prediction, and training are provided.
+
+* **Description of DPNUnet**: https://www.kaggle.com/c/data-science-bowl-2018/discussion/54741
+* **GitHub**: https://github.com/selimsef/dsb2018_topcoders
+</docs>
+
+<config lang="json">
+{
+  "name": "DPNUnet",
+  "type": "native-python",
+  "version": "0.2.9",
+  "description": "Nuclei segmentation with deep learning.",
+  "tags": ["GPU"],
+  "ui": "",
+  "cover": "",
+  "inputs": null,
+  "outputs": null,
+  "flags": [],
+  "icon": "extension",
+  "api_version": "0.1.5",
+  "env": {
+    "CPU": ["conda create -n dsb2018-cpu python=3.6.8"],
+    "GPU": ["conda create -n dsb2018-gpu python=3.6.8"]
+  },
+  "requirements": {"CPU": ["pip: descartes palettable geojson read-roi gputil namedlist",
+                           "pip: lightgbm imgaug pandas imageio",
+                           "conda: opencv tqdm scipy=1.0.0",
+                           "conda: pytorch=0.4.1 torchvision==0.2.0 -c pytorch",
+                           "pip: tensorboardX",
+                           "repo: https://github.com/oeway/DPNUnet-Segmentation"],
+                    "GPU": ["pip: descartes palettable geojson read-roi gputil namedlist",
+                           "pip: lightgbm imgaug pandas imageio",
+                           "conda: opencv tqdm scipy=1.0.0",
+                           "conda: pytorch=0.4.1 torchvision==0.2.0 cuda90 -c pytorch",
+                           "pip: tensorboardX",
+                           "repo: https://github.com/oeway/DPNUnet-Segmentation"]
+                   },
+  "dependencies": ["oeway/ImJoy-Plugins:Im2Im-Dashboard",
+                   "oeway/ImJoy-Plugins:ImageAnnotator",
+                   "oeway/ImJoy-Plugins:launchpad",
+                   "oeway/ImJoy-Plugins:Tabbed-Docs"],
+  "cover": "https://dl.dropbox.com/s/37aevx965do8qwh/DPN-Unet-v0.2.2.png"
+}
+</config>
+
+<script lang="python">
+from imjoy import api
+import os
+import sys
+os.chdir('DPNUnet-Segmentation/src')
+
+if api.TAG == 'GPU':
+    import GPUtil
+    # Get the first available GPU
+    DEVICE_ID_LIST = GPUtil.getFirstAvailable()
+    # Set CUDA_DEVICE_ORDER so the IDs assigned by CUDA match those from nvidia-smi
+    os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
+    api.log(f'Available GPUs: {DEVICE_ID_LIST}')
+    if len(DEVICE_ID_LIST)<= 0:
+        api.alert('No GPU available')
+        raise Exception('No GPU available')
+    DEVICE_ID = DEVICE_ID_LIST[0] # grab first element from list
+    api.log(f'Set GPU id to : {DEVICE_ID}')
+    # Set CUDA_VISIBLE_DEVICES to mask out all other GPUs than the first available device id
+    os.environ["CUDA_VISIBLE_DEVICES"] = str(DEVICE_ID)
+else:
+    api.log('Using CPU mode.')
+    api.alert('WARNING: you are running the plugin in CPU mode, training will be slow.')
+
+if not sys.platform.startswith('linux'):
+    api.alert('This plugin was only tested under LINUX with GPU. Issues on other platforms might arise.')
+
+import asyncio
+from imjoy import api
+from geojson_utils import masks_to_annotation, gen_mask_from_geojson
+from postprocessing import wsh
+import torch
+import os
+import numpy as np
+import random
+
+from utils import get_csv_folds, update_config, get_folds, cleanup_mac_hidden_files
+from config import Config
+from dataset.reading_image_provider import ReadingImageProvider, CachingImageProvider, InFolderImageProvider
+from dataset.image_types import SigmoidBorderImageType, BorderImageType, PaddedImageType, PaddedSigmoidImageType
+from pytorch_utils.concrete_eval import FullImageEvaluator
+from pytorch_utils.callbacks import Callback
+from augmentations.transforms import aug_victor
+from pytorch_utils.train import train
+from merge_preds import merge_files
+import json
+import cv2
+from scipy.misc import imread
+import base64
+from shutil import copyfile
+
+from scipy.misc import bytescale
+from skimage.measure import label, regionprops
+import palettable
+from skimage.color import label2rgb
+
+import argparse
+
+import os
+from collections import defaultdict
+
+
+from torch import nn
+from torch import optim
+from torch.autograd import Variable
+from torch.optim.lr_scheduler import ExponentialLR
+from torch.utils.data.dataloader import DataLoader as PytorchDataLoader
+from tqdm import tqdm
+from typing import Type
+
+from dataset.neural_dataset import TrainDataset, ValDataset
+from pytorch_utils.loss import dice_round, dice_loss, multi_class_dice, multi_class_dice_round, jaccard, jaccard_round
+from pytorch_utils.callbacks import EarlyStopper, ModelSaver, TensorBoard, CheckpointSaver, Callbacks, LRDropCheckpointSaver, ModelFreezer, LRStepScheduler
+from pytorch_utils.train import Estimator, models, optimizers, PytorchTrain
+
+if os.path.exists('/imjoy/imjoy-examples'):
+    ROOT_DIR = '/imjoy/imjoy-examples'
+else:
+    ROOT_DIR = ''
+
+import random
+from matplotlib import cm
+jet_colors = [cm.jet(i)[:3] for i in range(256)]
+random.shuffle(jet_colors)
+
+loop = asyncio.get_event_loop()
+
+
+async def plot_tensors(dash, tensor_list, label, titles=None):
+    image_list = [tensor.detach().cpu().numpy().reshape(tensor.shape[-2], tensor.shape[-1]) for tensor in tensor_list]
+    displays = {}
+    titles = titles or [ 'Tensor '+str(i) for i in range(len(image_list))]
+    for i in range(len(image_list)):
+        im = image_list[i]
+        min = im.min()
+        im = Image.fromarray(((im-min)/(im.max()-min)*255).astype('uint8'))
+        buffered = BytesIO()
+        im.save(buffered, format="JPEG")
+        img_str = base64.b64encode(buffered.getvalue()).decode('ascii')
+        imgurl = 'data:image/png;base64,' + img_str
+        displays[titles[i]] = imgurl
+    await dash.appendDisplay(label, displays)
+
+class UpdateUI(Callback):
+    def __init__(self, total_epoch, dash):
+        self.total_epoch = total_epoch
+        self.epoch = 0
+        self.logs = {}
+        self.dash = dash
+        self.step = 0
+
+    def on_batch_end(self, batch):
+        if batch < 2:
+            self.dash.setLoading({'status_text': 'Training in progress', 'loading': False})
+        if batch % 10 == 0:
+            logs = self.metrics_collection.train_metrics
+            self.logs = logs
+            api.showStatus('training epoch:'+str(self.epoch)+'/'+str(self.total_epoch))
+            api.log('batch:'+str(batch) + ' '+ str(logs))
+            if 'loss' in logs:
+                self.dash.updateCallback('onStep', self.step, {'loss': float(str(logs['loss']))})
+        #if self.current_results is not None:
+        #    current_results = self.current_results
+        #    plot_tensors(self.dash, [current_results['inputs'], current_results['outputs'], current_results['target']], label, ['inputs', 'outputs', 'target'])
+
+        self.step += 1
+
+    def on_epoch_end(self, epoch):
+        self.epoch = epoch
+        logs = self.metrics_collection.val_metrics
+        self.logs = logs
+        if 'loss' in logs:
+            self.dash.updateCallback('onStep', self.step, {'val_loss':  float(str(logs['loss']))})
+        api.showProgress(self.epoch/self.total_epoch*100)
+        api.showStatus('training epoch:'+str(self.epoch)+'/'+str(self.total_epoch))
+        api.log('epoch:'+str(self.epoch)+'/'+str(self.total_epoch) + ' '+ str(logs))
+        #current_results['inputs': images, 'outputs': ypreds, 'target': ytrues]
+
+
+def load_config(config_path):
+    with open(config_path, 'r') as f:
+        cfg = json.load(f)
+    config = Config(**cfg)
+    return config
+
+def load_path_mapping(config, training):
+    paths = {
+        'masks': '',
+        'images': '',
+        'labels': '',
+    }
+    mask_name, mask_ext = os.path.splitext(config.mask_file_name)
+    fn_mapping = {
+        'masks': lambda name: '{}/{}'.format(name, config.mask_file_name if training else mask_name+'_output'+mask_ext ),
+        'images': lambda name: '{}/{}'.format(name, config.image_file_name),
+        'labels': lambda name: name
+    }
+    if training:
+        paths = {k: os.path.join(config.dataset_path, p) for k, p in paths.items()}
+    else:
+        paths = {"images": config.dataset_path}
+    return paths, fn_mapping
+
+
+def train_bowl(dash, config, paths, fn_mapping, plot_images, save_path, log_path, model_path, scale_factor):
+    asyncio.set_event_loop(loop)
+    dash.setLoading({'status_text': 'Loading data...', 'loading': True})
+    if api.TAG == 'GPU':
+        torch.backends.cudnn.benchmark = True
+    cleanup_mac_hidden_files(config.dataset_path)
+    sample_count = len(os.listdir(config.dataset_path))
+    idx = list(range(sample_count))
+    random.seed(1)
+    random.shuffle(idx)
+    split = 0.95
+    train_idx, val_idx = idx[:int(split*sample_count)], idx[int(split*sample_count):]
+    im_type = BorderImageType if not config.sigmoid else SigmoidBorderImageType
+    im_val_type = PaddedImageType if not config.sigmoid else PaddedSigmoidImageType
+    ds = CachingImageProvider(im_type, paths, fn_mapping, scale_factor=scale_factor)
+    val_ds = CachingImageProvider(im_val_type, paths, fn_mapping, scale_factor=scale_factor)
+    fold = 0
+    api.showStatus('start training ...')
+    dash.setLoading({'status_text': 'Start training...', 'loading': True})
+    updateUI = UpdateUI(config.nb_epoch, dash)
+    num_workers = 0 # if os.name == 'nt' else 4
+    try:
+        if model_path is not None:
+            model = torch.load(model_path)
+            api.log('loaded model from ' + model_path)
+            resume = True
+        else:
+            model = None
+            resume = False
+
+        callbacks=[updateUI]
+        transforms=aug_victor(.97)
+        val_transforms=None
+        num_channels_changed=False
+        final_changed=False
+
+        if log_path is None:
+            log_path = os.path.join('..', 'logs', config.folder, 'fold{}'.format(fold))
+        if save_path is None:
+            save_path = os.path.join('..', 'weights', config.folder)
+
+
+        os.makedirs(log_path, exist_ok=True)
+        os.makedirs(save_path, exist_ok=True)
+        if model is None:
+            model = models[config.network](num_classes=config.num_classes, num_channels=config.num_channels)
+        estimator = Estimator(model, optimizers[config.optimizer], save_path,
+                            config=config, num_channels_changed=num_channels_changed, final_changed=final_changed)
+
+        estimator.lr_scheduler = ExponentialLR(estimator.optimizer, config.lr_gamma)#LRStepScheduler(estimator.optimizer, config.lr_steps)
+        callbacks = callbacks + [
+            ModelSaver(1, ("fold"+str(fold)+"_best.pth"), best_only=True),
+            ModelSaver(1, ("fold"+str(fold)+"_last.pth"), best_only=False),
+            CheckpointSaver(1, ("fold"+str(fold)+"_checkpoint.pth")),
+            # LRDropCheckpointSaver(("fold"+str(fold)+"_checkpoint_e{epoch}.pth")),
+            ModelFreezer(),
+            # EarlyStopper(10),
+            TensorBoard(log_path)
+        ]
+        # if not num_channels_changed:
+        #     callbacks.append(LastCheckpointSaver("fold"+str(fold)+"_checkpoint_rgb.pth", config.nb_epoch))
+
+        hard_neg_miner = None#HardNegativeMiner(rate=10)
+        # metrics = [('dr', dice_round)]
+
+        trainer = PytorchTrain(estimator,
+                            fold=fold,
+                            callbacks=callbacks,
+                            resume=resume,
+                            hard_negative_miner=hard_neg_miner)
+
+        train_loader = PytorchDataLoader(TrainDataset(ds, train_idx, config, transforms=transforms),
+                                        batch_size=config.batch_size,
+                                        shuffle=True,
+                                        drop_last=True,
+                                        num_workers=num_workers,
+                                        pin_memory=True)
+        val_loader = PytorchDataLoader(ValDataset(val_ds, val_idx, config, transforms=val_transforms),
+                                    batch_size=1,
+                                    shuffle=False,
+                                    drop_last=False,
+                                    num_workers=num_workers,
+                                    pin_memory=True)
+
+        # step =0
+        # def step_callback(result_dict):
+        #    dash.setLoading({'status_text': 'Start prediction: ' + result_dict['name'], 'loading': True})
+        #    api.log('result saved to ' + result_dict['output_path'])
+        #    # if step%10==0:
+        #    asyncio.ensure_future(plot_images(result_dict['name'], {'input image': result_dict['input_path'], 'predicted mask': result_dict['output_path']}))
+
+        #keval = FullImageEvaluator(config, ds, test=True, flips=3, step_callback=step_callback,  num_workers=num_workers, border=0)
+        #fold =  0
+
+
+        #for i in range(config.nb_epoch):
+            # model.eval()
+            # keval.predict(model, val_idx, 'training_val_' )
+            # merge_files(keval.save_dir)
+            # model.train()
+        trainer.fit(train_loader, val_loader, config.nb_epoch)
+
+
+    except:
+        api.alert('Failed to train model')
+        raise
+    finally:
+        dash.setLoading({'status_text': 'Training Stopped', 'loading': False})
+
+def eval_bowl(dash, config, paths, fn_mapping, model_path, plot_images, scale_factor):
+    asyncio.set_event_loop(loop)
+    try:
+        test = True
+        cleanup_mac_hidden_files(config.dataset_path)
+        sample_count = len(os.listdir(config.dataset_path))
+        val_indexes = list(range(sample_count))
+        im_val_type = PaddedImageType if not config.sigmoid else PaddedSigmoidImageType
+        im_prov_type = InFolderImageProvider if test else ReadingImageProvider
+        ds = im_prov_type(im_val_type, paths, fn_mapping, scale_factor=scale_factor)
+        num_workers = 0 # if os.name == 'nt' else 4
+        api.showStatus('Start prediction ...')
+        dash.setLoading({'status_text': 'Start Prediction...', 'loading': True})
+
+        
+        step =0
+        def step_callback(result_dict):
+            if step>2:
+                dash.setLoading({'status_text': 'Start prediction: ' + result_dict['name'], 'loading': False})
+            api.log('result saved to ' + result_dict['output_path'])
+            #if step%10==0:
+            out_img = imread(result_dict['output_path'])
+            # out_img = cv2.resize(out_img, (0, 0), fx=2, fy=2)
+            label_image = wsh(out_img[...,2] / 255., 0.3, 1 - out_img[...,1] / 255., out_img[...,2] / 255)
+            propsa = regionprops(label_image)
+            cell_count = len(propsa)
+        
+            base_path, _ = os.path.splitext(result_dict['output_path'])
+            cv2.imwrite(base_path + '_labels.png', label_image.astype('uint16'))
+            image_label_overlay = label2rgb(label_image, bg_label=0, bg_color=(0.8, 0.8, 0.8), colors=jet_colors)
+            # image_label_overlay = cv2.resize(image_label_overlay, (0, 0), fx=0.5, fy=0.5)
+            cv2.imwrite(base_path + '_color_labels.png', bytescale(image_label_overlay).astype('uint8'))
+
+            asyncio.ensure_future(plot_images(result_dict['name'], {'input image': result_dict['input_path'], 'predicted mask': result_dict['output_path'], f'predicted labels (count: {cell_count})': base_path + '_color_labels.png'}))
+        keval = FullImageEvaluator(config, ds, test=test, flips=3, step_callback=step_callback,  num_workers=num_workers, border=0)
+        fold =  0
+        keval.predict(model_path, val_indexes, ('fold' + str(fold) + "_") if test else "")
+        merge_files(keval.save_dir)
+        api.showStatus('Prediction successfully performed.')
+        dash.setLoading({'status_text': 'Prediction successfully performed.', 'loading': False})
+    except Exception as e:
+        api.showStatus('Failed to perform prediction. Try to reconnect plugin and relaunch prediction.')
+        dash.setLoading({'status_text': 'Failed to perform prediction.', 'loading': False})
+        raise
+
+
+def postprocessing(test_dir, step_callback):
+    im_names = os.listdir(test_dir)
+    test_ids = [os.path.splitext(i)[0] for i in im_names]
+    total = len(test_ids)
+    preds_test = [imread(os.path.join(test_dir, im, 'nuclei_border_mask_output.png'), mode='RGB') for im in im_names]
+    for n, id_ in enumerate(test_ids):
+        out_img = cv2.resize(preds_test[n], (0, 0), fx=2, fy=2)
+        label_image = wsh(out_img[...,2] / 255., 0.3, 1 - out_img[...,1] / 255., out_img[...,2] / 255)
+        image_label_overlay = label2rgb(label_image, bg_label=0, bg_color=(0.8, 0.8, 0.8), colors=palettable.colorbrewer.sequential.YlGn_9.mpl_colors)
+        image_label_overlay = cv2.resize(image_label_overlay, (0, 0), fx=0.5, fy=0.5)
+        cv2.imwrite(os.path.join(test_dir, im_names[n], 'nuclei_border_mask_output_color.png'), bytescale(image_label_overlay).astype('uint8'))
+        if step_callback:
+            step_callback({'name': id_, 'step': n, 'total': total})
+
+class ImJoyPlugin():
+    def __init__(self):
+        self.dialog = None
+        self.win_docs = None
+
+    async def run(self, ctx):
+        self.dialog = await api.showDialog(type='launchpad', data= [
+                {'name': 'Load trained model', 'description': 'Load a pre-trained model', 'callback': self.load_model, 'img': 'https://img.icons8.com/ios-glyphs/90/000000/upload.png'},
+                {'name': 'Annotate images', 'description': 'Start annotation of images.', 'callback': self.start_annotation, 'img': 'https://img.icons8.com/color/96/000000/edit.png'},
+                {'name': 'Generate masks', 'description': 'Generate masks from annotations for training.', 'callback': self.generate_masks, 'img': 'https://img.icons8.com/color/96/000000/metamorphose.png'},
+                {'name': 'Train with data from the engine', 'description': 'Use training data stored on a (local or remote) plugin engine.', 'callback': self.train, 'img': 'https://img.icons8.com/color/96/000000/services.png'},
+                {'name': 'Predict', 'description': 'Segment nuclei in images.', 'callback': self.predict, 'img': 'https://img.icons8.com/color/96/000000/double-right.png'},
+                {'name': 'Export trained model', 'description': 'Export the model', 'callback': self.export_model, 'img': 'https://img.icons8.com/material/96/000000/circled-down.png'},
+                {'name': 'Documentation', 'description': 'Show documentation.', 'callback': self.show_docs, 'img': 'https://img.icons8.com/color/96/000000/help.png'},
+             ]
+        )
+
+    async def show_docs(self):
+        if self.dialog is not None:
+            self.dialog.close()
+        try:
+            await self.win_docs.run({'data': {}})
+        except:
+            self.win_docs = await api.createWindow({
+                    'name': 'Documentation - DPNUnet',
+                    'type': 'Tabbed-Docs',
+                    'w':30, 'h':20,
+                    'data': {
+                        'tabs': [
+                            {'name': 'Summary', 'content': await api.getAttachment('summary')},
+                            {'name': 'Model', 'content': await api.getAttachment('model')},
+                            {'name': 'Data', 'content': await api.getAttachment('data')},
+                            {'name': 'Annotation', 'content': await api.getAttachment('annotation')},
+                            {'name': 'Training', 'content': await api.getAttachment('training')},
+                            {'name': 'Prediction', 'content': await api.getAttachment('prediction')},
+                            {'name': 'FAQ', 'content': await api.getAttachment('faq')}
+                        ]
+                    }
+            })
+
+    async def plot_images(self, label, images):
+        try:
+            displays = {}
+            for k in images:
+                if images[k].endswith('png'):
+                    with open(images[k], "rb") as image_file:
+                        img_str = base64.b64encode(image_file.read()).decode('ascii')
+                    imgurl = 'data:image/png;base64,' + img_str
+                    displays[k] = imgurl
+            await self.dash.appendDisplay(label, displays)
+        except Exception as e:
+            api.log('error: '+str(e))
+
+    async def load_model(self):
+        #if self.dialog is not None:
+        #    self.dialog.close()
+
+        workdirObj = await api.showFileDialog(type='file', name="Please select your model folder (typically named `fold0_best.pth`)", root=os.path.join(ROOT_DIR, "SEGMENTATION-MODELS"), engine=api.ENGINE_URL)
+        if workdirObj:
+            try:
+                api.showStatus('load pretrained model ...')
+                if not os.path.exists(os.path.join('..', 'weights', 'dpn_softmax_f0')):
+                    os.makedirs(os.path.join('..', 'weights', 'dpn_softmax_f0'))
+                save_path = os.path.join('..', 'weights', 'dpn_softmax_f0', 'fold0_best.pth')
+                if os.path.exists(workdirObj.path) and workdirObj.path.endswith('.pth'):
+                    copyfile(workdirObj.path, save_path)
+                    checkpoint = os.path.join('..', 'weights', 'dpn_softmax_f0', 'fold0_checkpoint.pth')
+                    if os.path.exists(checkpoint):
+                        os.remove(checkpoint)
+                    api.log(f'import model file from {workdirObj.path} , copied to {save_path}')
+                    api.alert('Pretrained model has been imported!')
+                else:
+                    api.alert('Invalid model file format (should be *.pth) ')
+            except Exception as e:
+                api.alert('Failed to load model, error: ' + str(e))
+
+    async def export_model(self):
+        #if self.dialog is not None:
+        #    self.dialog.close()
+        api.showStatus('exporting model ...')
+        save_path = os.path.join('..', 'weights', 'dpn_softmax_f0', 'fold0_best.pth')
+        if os.path.exists(save_path):
+            url = await api.getFileUrl(path=os.path.abspath(save_path), engine=api.ENGINE_URL)
+            await api.alert(content=f'Click <a href="{url}" target="_blank">here</a> to download the model', title='Export model')
+
+            api.log(f'import model file from {workdirObj.path} , copied to {save_path}')
+            api.alert('Model has been exported!')
+        else:
+            api.alert('No model available for exportting.')
+
+
+    async def predict(self):
+        if self.dialog is not None:
+            self.dialog.close()
+
+        # Check if model is imported
+        model_path = os.path.join('..', 'weights', 'dpn_softmax_f0', 'fold0_best.pth') # '../weights/dpn_softmax_f0/fold0_best.pth'
+        if not os.path.exists(model_path):
+            api.alert('No model found. Please import model before launching prediction')
+            return
+
+        ret = await api.showFileDialog(title="Please select a folder containing your testing data ( folder with a subfolder called `test`).", root='/imjoy/imjoy-examples/SEGMENTATION-DATA', type= 'directory', engine= api.ENGINE_URL)
+        if not ret:
+            return
+        #elif 'HeLa_DAPI' in ret.path:
+        #    options_string =  "Average nuclei size { id: 'nuclei_size', type:'number', placeholder: 200}"
+        #else:
+        #    options_string =  "Average nuclei size { id: 'nuclei_size', type:'number', placeholder: 20}"
+        #options = await api.showDialog( name="Prediction Configurations", ui= "<br>".join([options_string   ]))
+        #scale_factor = 20.0/float(options.nuclei_size)
+        config = load_config('configs/imjoy_dpn_softmax_s2.json')
+        config.dataset_path = os.path.join(ret.path, 'test')
+        config.results_dir  = os.path.join(ret.path, '__outputs__')
+        config.batch_size = 16
+        config.epoch_size = 24
+
+        scale_factor = 1
+        api.log('using scale factor = ', scale_factor)
+
+        image_file_name = await api.prompt('What is the image file name?', 'nuclei.png')
+ 
+        config.image_file_name = str(image_file_name)
+
+        paths, fn_mapping  = load_path_mapping(config, False)
+
+        self.dash = await api.createWindow(type="Im2Im-Dashboard", name="DPN-Unet Segmentation Model", w=25, h=10, data={'display_mode': 'all'})
+        try:
+            await loop.run_in_executor(None, eval_bowl, self.dash, config, paths, fn_mapping, model_path, self.plot_images,scale_factor)
+        except Exception as e:
+            api.alert(f'Error occured: {e}')
+        else:
+            await api.showProgress(100)
+            api.alert(f'Prediction done, generated masks saved to {config.dataset_path}')
+
+
+    async def train(self):
+        if self.dialog is not None:
+            self.dialog.close()
+        options = await api.showDialog( name="Training Configurations", ui= "<br>".join([
+        # "Model Name {id: 'model_name', type: 'string', placeholder: 'dpnunet-model-1'}",
+        "Epochs { id: 'epochs', type:'number', placeholder: 10000}",
+        "Image file name { id: 'image_file_name', type:'string', placeholder: 'nuclei.png'}",
+        "Mask file name { id: 'mask_file_name', type:'string', placeholder: 'nuclei_border_mask.png'}",
+        ]))
+
+        config = load_config('configs/imjoy_dpn_softmax.json')
+        ret = await api.showFileDialog(title="Please select a folder containing the training and testing data as subfolders ‘train’ and ‘test.", root='/imjoy/imjoy-examples/SEGMENTATION-DATA', type= 'directory', engine= api.ENGINE_URL)
+        config.dataset_path =  os.path.join(ret.path, 'train')
+        config.results_dir = os.path.join(ret.path, 'results')
+        config.nb_epoch = options.epochs
+        config.batch_size = 16
+        config.epoch_size = 24
+        config.image_file_name = options.image_file_name
+        config.mask_file_name = options.mask_file_name
+        paths, fn_mapping  = load_path_mapping(config, True)
+        log_path =  os.path.join('..', 'logs', 'dpn_softmax_f0' 'fold0')
+        save_path = os.path.join('..', 'weights', 'dpn_softmax_f0')
+
+        model_path = '../weights/dpn_softmax_f0/fold0_best.pth'
+        if not os.path.exists(model_path):
+            model_path = None
+
+        scale_factor = 1.0
+        api.log(f'model will be saved to {save_path}')
+        self.dash = await api.createWindow(type="Im2Im-Dashboard", name="Training DPN-Unet Segmentation Model", w=25, h=10, data={'display_mode': 'all', 'metrics': ["loss", "val_loss"], 'callbacks': ['onStep']})
+        await loop.run_in_executor(None, train_bowl, self.dash, config, paths, fn_mapping, self.plot_images, save_path, log_path, model_path, scale_factor)
+
+        api.alert(f'Training finished, model saved to {save_path}')
+
+    async def generate_masks(self):
+        if self.dialog is not None:
+            self.dialog.close()
+        ret = await api.showFileDialog(root='/imjoy/imjoy-examples/SEGMENTATION-DATA', type="directory")
+        datasets_dir = ret.path
+        print("datasets_dir:", datasets_dir)
+        file_ids = os.listdir(os.path.join(datasets_dir, "train"))
+        total = len(file_ids)
+        for i, file_id in enumerate(file_ids):
+            await api.showProgress(i/total*100)
+            await api.showStatus(f'Processing {i}/{total}: {file_id}')
+            file_path = os.path.join(datasets_dir, "train", file_id, "annotation.json")
+            try:
+                gen_mask_from_geojson([file_path], masks_to_create_value=["border_mask"])
+            except:
+                print("generate mask error:", os.path.join(datasets_dir, "train", file_id))
+        await api.showProgress(100)
+        await api.alert('Finished, generated masks saved to ' + datasets_dir)
+
+
+    async def start_annotation(self):
+        if self.dialog is not None:
+            self.dialog.close()
+        await api.createWindow(name="Annotation for DPNUnet", fullscreen=True, type="ImageAnnotator", data={}, config={})
+
+    def setup(self):
+        api.log('initialized')
+
+api.export(ImJoyPlugin())
+</script>
+
+
+
+<attachment name="summary">
+<br>
+<p id="segmentation-summary">
+  In this documentation we describe a complete workflow to perform segmentation of nuclei with deep learning.
+</p>
+
+<figure>
+    <img src="https://www.dropbox.com/s/8t2dlbfisdyfezc/dpnunet-prediction-example.png?dl=1"  class="img-responsive p-centered" alt="nuclei-segmentaton">
+    <figcaption>Nuclei segmentation: DAPI (left), predicted masks (right).</figcaption>
+</figure>
+
+The segmentation is perform by the winning approach (DPNUnet) of the 2018 Kaggle Data Science Bowl.
+
+* **Description of DPNUnet**: <a onclick="api.utils.openUrl('https://www.kaggle.com/c/data-science-bowl-2018/discussion/54741')">https://www.kaggle.com/c/data-science-bowl-2018/discussion/54741</a>
+* **GitHub**: <a onclick="api.utils.openUrl('https://github.com/selimsef/dsb2018_topcoders/')">https://github.com/selimsef/dsb2018_topcoders/</a>
+
+A model for DPNUnet has been **trained on very divergent biomedical data**, and will perform on many data-sets even without retraing.
+When peforming prediction, this pre-trained can be will be directly used (see secttion 'Model' for details). We also provide the 
+possiblity to re-train this model, and use it for prediction after successful termination of the training.
+
+When starting the DPNUnet-Segmentation plugin, you will see a **central launch pad** allowing to select the task to be performed:
+
+<figure>
+    <img src="https://www.dropbox.com/s/8komkrwt1tllj6u/dpnunet-launchpad.PNG?dl=1" width="600" class="img-responsive p-centered" alt="segmentation-launchpad">
+    <figcaption>Screen shot of DPNUnet-Segmentation launchpad.</figcaption>
+</figure>
+
+**Highlights of the workflow**
+
+* Plugin for annotation of your own data and creating image mask suitable for training of DPNUnet
+* Train on your own data starting with the pre-trained DPNUnet
+* Perform nuclei segmentation on new data and inspect results in interative tool
+
+
+</attachment>
+
+<attachment name="deeplearning">
+<br>
+<p id="deep-learning-primer">
+We provide only a quick overview what deep learning is and establish the necessary
+terminology to understand this segmentation workflow. For a more detailed introduction,
+we refer to many available online ressources.
+</p>
+
+<h2>What is deep learning</h2>
+Deep learning is a machine learning method that uses an input X to predict
+an output Y. This prediction is performed with Deep Neural Networks.
+The essential building block of such a neural network is a perceptron
+which accomplishes simple signal processing. These perceptrons are then
+connected into a large mesh network.
+Importantly, such a network has to be trained before prediction can be performed.
+
+<figure>
+    <img src="https://www.dropbox.com/s/hbg3c23gwfedu0p/dpnunet-neural_network.png?dl=1" width="280" class="img-responsive p-centered" alt="anna-palm-reconstruction">
+    <figcaption>Basic structure of a neural network.</figcaption>
+</figure>
+
+<h2>Train a neural network</h2>
+To train a neural network annotated data has to be provided, for instance a DAPI image
+with outlined nuclei. These data are then used by the neural network to learn how
+to detect nuclei in new images.
+
+The training is performed iteratively and progress is monitored with so-called loss functions.
+These functions measure how well the method performs by comparing the input images to the
+generated images by the neural network. The annotated data is split into
+two data-sets: one for the **actual training**, one for **validation**. The validation data is not
+used for training but to monitor how the model generalizes to new data.
+
+When monitoring training progress different distinct phases are usually observed:
+initially the model can neither describe the training and validation data (**underfitting**).
+Eventually the model will describe the training data too well and not generalize
+anymore to new data (**overfitting**). Good training finds the sweet spot between these two
+extreme cases.
+
+<figure>
+    <img src="https://www.dropbox.com/s/inlro9emd2yk1y6/dpnunet-training_validation.png?dl=1" width="400" class="img-responsive p-centered" alt="anna-palm-reconstruction">
+    <figcaption>Training and validation loss during training.</figcaption>
+</figure>
+
+Training a neural network is **computationally expensive** and is best performed on
+**GPUs** (Graphics Processing Unit) or computational clusters. Applying a trained model is less
+demanding and can be done on routinely on regular computers, and depending on the implementation
+even on mobile devices.
+
+Applying a neural network to **new data** frequently requires **re-training**. Here, a already trained
+model is used as the starting point to perform training on the new data.
+
+</attachment>
+
+<attachment name="model">
+<br>
+<p style="color:#FF0000"> FOR IMJOY REVIEWERS: when using the provided remote engine 'imjoy.pasteur.cloud',
+  a pre-trained model will automatically be loaded. You can reload this model from
+  'imjoy/imjoy-examples/SEGMENTATION-MODEL/pretrained-model-dpn-softmax/fold0_best.ph'
+</p>
+
+DPNUnet has been **trained on very divergent biomedical data**, and will perform well on many data-sets
+even without re-training. The model has been trained on nuclei with an average size of around 20 pixels.
+Best performance is hence achieved when images are resized prior to prediction such that the contained
+nuclei are roughly of this size. To use the pretrained model, you have to
+1. Download the model from <a onclick="api.utils.openUrl('https://www.dropbox.com/s/tufkbdta441qqtz/dpn_softmax_f0_fold0_best.pth?dl=0')">**here**.</a>
+2. Load the model to the plugin engine where the DPNUnet plugin is running. See FAQ for more details on this upload.
+
+Please note that once loaded, the model is availabel in the plugin, even after re-starting ImJoy and the DPNUnet plugin.
+
+This model can then be directly used for **prediction** or be **re-trained** on new data. More details can be
+found in the respective section.
+
+
+</attachment>
+
+
+<attachment name="data">
+<br>
+<p style="color:#FF0000">
+FOR IMJOY REVIEWERS: when using the provided remote engine 'imjoy.pasteur.cloud',
+the two data-set available containing  annotated training data with masks, as well as test data.:
+(1) HeLa cells ('imjoy/imjoy-examples/SEGMENTATION-DATA/HeLa_DAPI_v2'), (2)
+full data-set of the original DPNUnet ('/imjoy/imjoy-examples/data-science-bowl/dsb2018-dataset-v0.1.1'). Both data-sets
+
+These data can be used to test every step in the analysis workflow. To get started, we recommend using
+the smaller HeLa data-set for faster computations.
+
+</p>
+<br>
+<p id="data-requirements">
+Here we describe how the training images have to be provided: image format, naming scheme, and data organization.
+</p>
+
+Annotated training data with DAPI stained HeLa cells is available <a onclick="api.utils.openUrl('https://www.dropbox.com/sh/qqj8rwdl5wfj395/AAB3T6zBegu5RlcWjQj0_Ctga?dl=0')">**here**.</a>
+
+## Data organization for training
+
+Training data has to be organized with the following **folder structure**:
+* Data for traning and validation is stored in a folder 'train', data for testing the prediction is stored in folder 'test'.
+* Each sample (e.g. a field of view) is stored in a separate subfolder with a unique name.
+
+Images have to be provided in the following **format**:
+* **Filenames have to be identical** across these subfolders, e.g. `nuclei.png`
+* Image have to be **2D**. 3D images have to be converted to 2D, e.g. with a maximum intensity projection.
+* Images are stored as **RGB PNGs**.
+
+We then provide plugins to annotate images (resulting in `annotation.json`) and create masks (resulting in `nuclei_border_mask.png`). More
+details can be found in the dedicated sections. The network will then learn to predict these masks from
+the input images, additional post-processing will then yield the actual nuclei (see section 'Prediction' for details).
+
+This will result in the following folder structure
+```
+├─ data_for_training/
+│  ├─ train/
+│  │  ├─ img1
+│  │  │  ├─ annotation.json
+│  │  │  ├─ nuclei.png
+│  │  │  ├─ nuclei_border_mask.png
+│  │  ├─ img2
+│  │  │  ├─ annotation.json
+│  │  │  ├─ nuclei.png
+│  │  │  ├─ nuclei_border_mask.png
+│  │  ...
+│  ├─ test/
+│  │  ├─ img57
+│  │  │  ├─ annotation.json
+│  │  │  ├─ nuclei.png
+│  │  │  ├─ nuclei_border_mask.png
+│  │  ├─ img58
+│  │  │  ├─ annotation.json
+│  │  │  ├─ nuclei.png
+│  │  │  ├─ nuclei_border_mask.png
+│  │   ...
+```
+
+</attachment>
+
+<attachment name="annotation">
+<br>
+<p style="color:#FF0000"> FOR IMJOY REVIEWERS: when using the provided remote engine 'imjoy.pasteur.cloud',
+  annotated training data is already available at 'imjoy/imjoy-examples/SEGMENTATION-DATA/HeLa_DAPI_v1'. You can
+  open these data in the Annotator to inspect the annotations, or directly create masks as described below.
+</p>
+<br>
+<p id="annotation">
+This plugin allows to annote the nuclei in the images. The plugin was designed to read the
+above describe folder structure, i.e. opening the folder `data_for_training` will allow to
+annotate all contained images.
+</p>
+
+## Annotator plugin
+This plugin allows to annotate different structures of interests in mult-channel images.
+You can load an entire data-set containing files in subfolders into the Annotator and annotate these files.
+Annotations are stored in geojson format and can be either be loaded on a plugin engine for mask
+generation and training, or retrieved for later use.
+
+If you want to familiarize yourself with the Annotoation tool, you can simply start it by pressing `Annotations`.
+It will open with a default image, and you can already familiarize yourself with some of the features
+* Zooming and panning.
+* Change contrast
+* Show multiple channels as an overlay
+* Annotate different structurs, and toggle display of certain annotations.
+
+<figure>
+    <img src="https://www.dropbox.com/s/71ujzlf8rfzw7t8/dpnunet-annotation.png?dl=1" width="500" class="img-responsive p-centered" alt="segmentation-launchpad">
+    <figcaption>Image annotation in ImJoy.</figcaption>
+</figure>
+
+## Import your images into the Annotator plugin
+1. Prepare training data as specified in the section 'Data'.
+0. These data, i.e. the folder containing the subfolder 'train' and 'test', then have to copied
+  to plugin engine, where the segmentation plugin is running. See FAQ for more details for how to load data on an engine.
+0. To read the data into the Annotator, follow these steps
+      1.  Press on the `File` dropdown menu in the upper right corner of the ImJoy interface and select `Import Samples`.
+      0.  This will open a file import dialog. In the upper left corner select `Select Plugin Files` and select
+          the folder with the training data.
+      0.  This will populate the interface with all files in the folder. An icon
+          is shown for each present file, hoovering over this icon will display its name.
+      0.  You then have to set a **filter on the file-name** to determine which image(s)
+          will be read into the Annotator. For this you set a name for the channel,
+          e.g. `nuclei`, and the identifier of this image, e.g. `nuclei.png`. Note that
+          pressing on an icon of file, will populate the filter fields with a suggestion, which can
+          be modified further. Press `Add Channel` to add this channel. You then see this
+          channel as an additional column in the interface, and for each channel if such a file was found.
+      0.  Press `Import` to open the Annotator with the specified files.
+
+<figure>
+    <img src="https://www.dropbox.com/s/tket24vfukarmzn/dpnunet-annotator-load-data.gif?dl=1" class="img-responsive p-centered" alt="segmentation-launchpad">
+    <figcaption>Image annotation in ImJoy.</figcaption>
+</figure>
+
+## Annotate structure of interest
+You can then specify your annotation:
+1. From the `Annotation` dropdown menu, you can specify which annotations type you want to
+  outline.
+2. By pressing `New Marker` you can specify an new annotation type. You can define
+  its name, the color in which it will show, and what outline type ('polygon' for nuclei).
+
+## Export annotations
+Once you are done, you can export the annotations from the `Exports` dropdown menu
+and selecting `All annotations`. This will write the `annotation.json` to the respective folders.
+
+
+## Generate masks
+The DPNUnet learns to predict two mask from the input image: a filled mask, and a mask for areas where nuclei touch (so called 'border')
+You can generate these masks from the annotated data by pressing `Generate Masks` and select the folder containing the annotated data.
+The masks will be stored as `nuclei_border_mask.png` for each annotated image.
+
+<div class="container">
+  <div class="columns">
+    <div class="column col-xs-4">Annotation<img src="https://www.dropbox.com/s/9ayhcbpevzv757b/dpnunet-nuclei-annotation.png?dl=1" class="img-responsive ..." alt="...">
+ </div>
+  <div class="column col-xs-4"> Filled mask <img src="https://www.dropbox.com/s/ggrwbrqvpboy9pf/dpnunet-nuclei-mask-fill.png?dl=1" class="img-responsive ..." alt="...">
+  </div>
+    <div class="column col-xs-4"> Border mask <img src="https://www.dropbox.com/s/z2mkpyw2mgi9ffx/dpnunet-nuclei-mask-border.png?dl=1" class="img-responsive ..." alt="...">
+  </div>
+</div>
+
+</attachment>
+
+<attachment name="training">
+ <br>
+<p style="color:#FF0000"> FOR IMJOY REVIEWERS: when using the provided remote engine 'imjoy.pasteur.cloud',
+  a model is already loaded, and annotated training data with masks is
+  available at 'imjoy/imjoy-examples/SEGMENTATION-DATA/HeLa_DAPI_v1'. You can use these data to try training.
+  but be aware that this model could contain checkpoints from earlier training attempts and will resume from there.
+  To initiate training from the pre-trained model, please load this model into the engine (see section Model).
+</p>
+<br>
+
+Before starting training, you have to provide a model and data. See the 'FAQ' for how to load these into
+the plugin engine.
+1. **trained model** (more details in section 'Model'). The neural network will be initiated
+ with this model, and then re-train it. If a model was already loaded and training was performed, training will resumed
+ from a stored checkpoint. To train the model from scratch, reload the original model.
+2. **training data**. Has to be organized as described in section 'Data' and contain both input images and masks.
+
+The actual training is performed with **these steps**:
+1. Press button `Train with data from engine`.
+0. This will show a configuration dialog, where you can specify the filename of the input images, e.g. `nuclei.png`, and the target masks, e.g. `nuclei_border_mask.png`.
+ Further you can specify for how many epochs the network will train, and under which name the model will be saved.
+<figure>
+    <img src="https://www.dropbox.com/s/f0wqnjs67jriabt/dpnunet-training-config.PNG?dl=1" width="300" class="img-responsive p-centered" alt="training-config">
+    <figcaption>Training and validation loss during training.</figcaption>
+</figure>
+0. Specify the data folder containing subfolders 'train' and 'valid'.
+0. Training progress can be inspected with the dashboard. During training, checkpoints are saved at regular intervals. This allows to resume
+ training in case it terminated prematurely.
+0. Once training is terminated, and the obtained results are better than the original model, the model will be automatically used
+ for prediction. You can also export it, to then reuse it later.
+
+</attachment>
+
+<attachment name="prediction">
+<br>
+<p style="color:#FF0000"> FOR IMJOY REVIEWERS: you can test the prediction on the two provided test data:
+HeLa cells ('HeLa ...') and the full data-set from the original DPNUnet (dsp2018 ...). The HeLa data-set
+is smaller and prediction will be faster.
+</p>
+
+## Model for prediction
+Prediction will be performed with best available model. This is either a loaded pre-trained model, or in case
+re-training yielded better resuls, the re-trained model. More details can be found in the section 'Model'.
+
+**To be sure that you use a certain model**, e.g. the pre-trained model from the Kaggle challenge, **please load this model prior to prediction**. 
+
+Please note that this model has been trained on nuclei with an **average size of 20 pixel**. For best performance,
+images should be rescaled such that the nuclei in the images are roughly this size.
+
+## Perform prediction
+1. Press button `Predict`.
+0. Select a folder with test data (folder containing a subfolder 'test').
+0. Specify the name of the input images, default name is `nuclei.png`.
+<figure>
+    <img src="https://www.dropbox.com/s/q34dip0milx03iw/dpnunet-prediction-image-name.png?dl=1" width="300" class="img-responsive p-centered" alt="training-config">
+    <figcaption>Dialog to specify file-name of input images. </figcaption>
+</figure>
+0. Predicted data will then be shown in a dashboard, where you can use the slider to navigate the different samples.
+<figure>
+    <img src="https://www.dropbox.com/s/a2gphxu25p8e4yl/dpnunet-prediction-dashboard.png?dl=1" width="500" class="img-responsive p-centered" alt="training-config">
+    <figcaption>Inspecting the prediction results. (Left) original image, (middle) predicted masks, (right) identified nuclei shown as labels. </figcaption>
+</figure>
+0. The predicted masks will be saved as `nuclei_border_mask_output.png` in each sample folder.
+0. To obtain the actual nuclei, a watershed segmentation is performed as follows: the predicted border is
+ mask is substracted from the predicted filled mask. The resulting image is used as a seed for a watershed
+ segmentation on the predicted filled mask. After identifying the individual nuclei, the results are stored as 
+    * `nuclei_border_mask_output_labels.png`: image where each identified nuclei is a filled mask with a constant intensity value. 
+    * `nuclei_border_mask_output_color_labels.png`: label image shown with a color-lookup table for inspection. 
+
+</attachment>
+
+<attachment name="faq">
+Here we provide answer to frequenty asked questions and encountered problems.
+
+## How can I load data or a model into the plugin engine?
+You can simply drag and drop a folder containing either training data or model:
+1. In ImJoy, press `Files`, and `Open Engine File`.
+2. If ImJoy is connected to multiple plugin engines, select the one where the segmentation plugin is running in the upper part of the interface.
+3. Navigate to the folder where you want to store your data.
+4. Drag & drop the folder from Finder (MacOS) or Explorer (WIN) into the ImJoy file dialog.
+
+<figure>
+    <img src="https://www.dropbox.com/s/oqofqh7fbnjgb0v/dpnunet-upload.gif?dl=1" width="700" class="img-responsive p-centered" alt="load-model-into-engine">
+    <figcaption>Load data on a plugin engine.</figcaption>
+</figure>
+
+</attachment>
