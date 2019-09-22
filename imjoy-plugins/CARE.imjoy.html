@@ -1,0 +1,728 @@
+﻿<docs lang="markdown">
+# CARE
+
+Weigert et. al, Content-aware image restoration: pushing the limits of fluorescence microscopy, Nature Methods, 2018
+
+[Paper on Nature Methods](https://www.nature.com/articles/s41592-018-0216-7)
+
+This is a demo plugin ported from https://github.com/CSBDeep/CSBDeep/blob/master/examples/denoising2D_probabilistic/1_training.ipynb
+
+</docs>
+
+<config lang="json">
+{
+  "name": "CARE",
+  "type": "native-python",
+  "version": "0.1.15",
+  "api_version": "0.1.2",
+  "description": "This plugin demonstrates denoising using CARE.",
+  "tags": ["CPU", "GPU", "macOS CPU"],
+  "ui": "",
+  "inputs": null,
+  "outputs": null,
+  "flags": [],
+  "icon": null,
+  "env": {
+      "CPU": "conda create -n care-cpu python=3.6.7",
+      "GPU":  "conda create -n care-gpu python=3.6.7",
+      "macOS CPU": "conda create -n care-mac-cpu python=3.6.7"
+  },
+  "requirements": {
+      "CPU": ["pip: tensorflow==1.8.0 Pillow csbdeep tifffile six"],
+      "GPU": ["pip: tensorflow-gpu==1.8.0 Pillow csbdeep tifffile six gputil"],
+      "macOS CPU": ["pip: tensorflow==1.5.0 Pillow csbdeep tifffile six"]
+  },
+  "dependencies": [
+      "oeway/ImJoy-Plugins:Im2Im-Dashboard",
+      "oeway/ImJoy-Plugins:launchpad",
+      "oeway/ImJoy-Plugins:Tabbed-Docs"
+  ],
+  "cover": ["https://dl.dropbox.com/s/bo8timmql033xy1/CARE-0.1.8.gif", "https://dl.dropbox.com/s/rq5ikbben3xbxge/CARE-0.1.8-2.gif"]
+ }
+</config>
+
+<script lang="python">
+from __future__ import print_function, unicode_literals, absolute_import, division
+import os
+import asyncio
+import random
+import numpy as np
+from tifffile import imread
+
+if api.TAG == 'GPU':
+    import GPUtil
+    # Set CUDA_DEVICE_ORDER so the IDs assigned by CUDA match those from nvidia-smi
+    os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
+
+    # Get the first available GPU
+    DEVICE_ID_LIST = GPUtil.getFirstAvailable()
+    api.log(f'Available GPUs: {DEVICE_ID_LIST}')
+    if len(DEVICE_ID_LIST)<= 0:
+        api.alert('No GPU available')
+        raise Exception('No GPU available')
+
+    DEVICE_ID = DEVICE_ID_LIST[0] # grab first element from list
+    api.log(f'Set GPU id to : {DEVICE_ID}')
+    # Set CUDA_VISIBLE_DEVICES to mask out all other GPUs than the first available device id
+    os.environ["CUDA_VISIBLE_DEVICES"] = str(DEVICE_ID)
+
+import concurrent.futures
+from imjoy import api
+
+import tensorflow as tf
+import base64
+from io import BytesIO
+from PIL import Image
+
+from keras.callbacks import Callback
+from csbdeep.utils.plot_utils import to_color
+from csbdeep.utils import download_and_extract_zip_file, axes_dict, plot_some, plot_history
+from csbdeep.utils.tf import limit_gpu_memory
+from csbdeep.io import load_training_data
+from csbdeep.models import Config, CARE
+from csbdeep.data import RawData, create_patches
+import json
+
+
+# api.log(str(os.environ))
+
+if os.path.exists('/imjoy/imjoy-examples'):
+    ROOT_DIR = '/imjoy/imjoy-examples'
+else:
+    ROOT_DIR = ''
+
+if tf.test.gpu_device_name():
+    api.log('Default GPU Devices: {}'.format(tf.test.gpu_device_name()))
+else:
+    api.log("No GPU device is avilable")
+
+def plot_tensors(dash, tensor_list, label, titles):
+    # randomly select a Z
+    index = np.random.randint(0, tensor_list[0].shape[0])
+    image_list = [tensor[index, :,:] for tensor in tensor_list]
+    displays = {}
+    titles = titles or [ 'Tensor '+str(i) for i in range(len(image_list))]
+    for i in range(len(image_list)):
+        im = image_list[i]
+
+        im = im[ :,:]
+        min = 0 # im.min()
+        normalized_im = np.clip(((im-min)/(im.max()-min)*255), 0, 255)
+        im = Image.fromarray(normalized_im.astype('uint8'))
+
+        buffered = BytesIO()
+        im.save(buffered, format="JPEG")
+        img_str = base64.b64encode(buffered.getvalue()).decode('ascii')
+        imgurl = 'data:image/png;base64,' + img_str
+        displays[titles[i]] = imgurl
+    dash.appendDisplay(label, displays)
+
+
+async def plot_all_tensors(dash, result_dir, result_url, tensor_list, label, titles):
+    # randomly select a Z
+
+    for slice in range(tensor_list[0].shape[0]):
+        image_list = [tensor[slice, :,:] for tensor in tensor_list]
+        displays = {}
+        titles = titles or [ 'Tensor '+str(i) for i in range(len(image_list))]
+        for i in range(len(image_list)):
+            im = image_list[i]
+            api.log(str(im.shape))
+
+            im = im[ :,:]
+            min = 0 # im.min()
+            normalized_im = np.clip(((im-min)/(im.max()-min)*255), 0, 255)
+            im = Image.fromarray(normalized_im.astype('uint8'))
+
+            sample_dir = os.path.join(result_dir, label)
+            if not os.path.exists(sample_dir):
+                os.makedirs(sample_dir)
+
+            im.save(os.path.join(sample_dir, label+'_'+titles[i]+'_slice_'+str(slice) + '.png'), format="png")
+            #displays[titles[i]] = result_url + '/' + label + '/' + label+titles[i]+'_slice_'+str(slice) + '.png'
+            buffered = BytesIO()
+            im.save(buffered, format="JPEG")
+            img_str = base64.b64encode(buffered.getvalue()).decode('ascii')
+            imgurl = 'data:image/png;base64,' + img_str
+            displays[titles[i]] = imgurl
+        await dash.appendDisplay(label + '_slice ' + str(slice), displays)
+
+class UpdateUI(Callback):
+    def __init__(self, model, total_epoch, dash, config, val_data=None):
+        self.total_epoch = total_epoch
+        self.epoch = 0
+        self.logs = {}
+        self.dash = dash
+        self.step = 0
+        self.config = config
+        self.m = model
+        if val_data is not None:
+            self.val_x, self.val_y, self.axes = val_data
+        else:
+            self.val_x, self.val_y, self.axes = None, None, None
+
+    def on_batch_end(self, batch, logs):
+        if batch % 10 == 0:
+            self.logs = logs
+            api.showStatus('training epoch:'+str(self.epoch)+'/'+str(self.total_epoch))
+            api.log('batch:'+str(batch) + ' '+ str(logs))
+            self.dash.updateCallback('onStep', self.step, {'loss': np.asscalar(logs['loss']), 'mse': np.asscalar(logs['mse'])})
+        self.step += 1
+    def on_epoch_end(self, epoch, logs):
+        self.epoch = epoch
+        self.logs = logs
+        self.dash.updateCallback('onStep', self.step, {'val_loss': np.asscalar(logs['val_loss'])})
+        api.showProgress(self.epoch/self.total_epoch*100)
+        api.showStatus('training epoch:'+str(self.epoch)+'/'+str(self.total_epoch))
+        api.log('epoch:'+str(self.epoch)+'/'+str(self.total_epoch) + ' '+ str(logs))
+        x, y, axes = self.val_x, self.val_y, self.axes
+        if x is not None:
+            try:
+                restored = self.m.predict(x, axes)
+            except Exception as e:
+                api.error(str(e))
+                restored = self.m.predict(x, axes, n_tiles=(1,4,4))
+            label = 'Step '+ str(self.step)
+            if y is not None:
+                tensor_list = [x, restored, y]
+                titles = ['input', "output", 'target']
+            else:
+                tensor_list = [x, restored]
+                titles = ['input', "output"]
+            plot_tensors(self.dash, tensor_list, label, titles)
+
+loop = asyncio.get_event_loop()
+class ImJoyPlugin():
+    def setup(self):
+        print('setup in python')
+
+    def train(self, data_file, epochs, model_name, data_config, val_files):
+        asyncio.set_event_loop(loop)
+        self.dash.setLoading({'status_text': 'Loading data...', 'loading': True})
+        (X,Y), (X_val,Y_val), axes = load_training_data(data_file, validation_split=0.1, verbose=True)
+        api.log(str(X.shape))
+        c = axes_dict(axes)['C']
+        n_channel_in, n_channel_out = X.shape[c], Y.shape[c]
+
+        config = Config(axes, n_channel_in, n_channel_out, probabilistic=True, train_epochs=epochs, train_steps_per_epoch=20)
+        print(config)
+
+        api.showStatus('creating model ...')
+        self.dash.setLoading({'status_text': 'Creating model...', 'loading': True})
+        basedir = 'CARE-MODELS'
+        model = CARE(config, model_name, basedir=basedir)
+        care_data_config = os.path.join(basedir, model_name, "care_data_config.json")
+        with open(care_data_config, "w") as write_file:
+            json.dump(data_config, write_file)
+
+        val_x_file, val_y_file, val_axes = val_files
+        if val_x_file is not None and os.path.exists(val_x_file):
+            val_x = imread(val_x_file)
+        else:
+            val_x = None
+        if val_y_file is not None and os.path.exists(val_y_file):
+            val_y = imread(val_y_file)
+        else:
+            val_y = None
+        axes = val_axes
+
+        updateUI = UpdateUI(model, config.train_epochs, self.dash, config, (val_x, val_y, axes))
+
+        api.showStatus('start training')
+        self.dash.setLoading({'status_text': 'Start training...', 'loading': False})
+        model.prepare_for_training()
+        model.callbacks.append(updateUI)
+        history = model.train(X,Y, validation_data=(X_val,Y_val))
+        print(sorted(list(history.history.keys())))
+        api.showStatus('CARE training completed!')
+
+    async def prepare_data(self, data_file, source_dirs, target_dir):
+        if data_file.startswith('http') and data_file.endswith('.zip'):
+            filename = data_file.split('/')[-1]
+            name, _ = os.path.splitext(filename)
+
+            await api.showStatus('Downloading data ' + filename + '...')
+            download_and_extract_zip_file (
+                url       = data_file,
+                targetdir = 'data',
+            )
+            await api.showStatus('Downloaded ' + filename )
+
+            if not os.path.isdir(os.path.join('data', name, 'train')):
+                api.error('Failed to detect train folder.')
+                await api.alert('Your zip file must contain a folder called `train`.')
+                return
+
+            data_file = os.path.join('data', name)
+        elif data_file.startswith('http'):
+            api.alert('Only zip files can be downloaded and used for now.')
+            return
+        elif data_file.startswith('.npz'):
+            if os.path.exists(data_file):
+                return data_file, ( None, None, 'ZYX')
+            else:
+                await api.alert(data_file + " doesn't exist.")
+                return
+
+        # handle data folder
+        data_dir = data_file
+        _, name = os.path.split(data_dir)
+        await api.showStatus('Loading data from ' + data_dir + '/train' )
+        raw_data = RawData.from_folder (
+            basepath    = os.path.join(data_dir, 'train'),
+            source_dirs = source_dirs,
+            target_dir  = target_dir,
+            axes        = 'ZYX',
+        )
+
+        npz_path = data_dir+ '.npz'
+        await api.showStatus('Creating patches for ' + data_dir + '/train' )
+        X, Y, XY_axes = create_patches (
+            raw_data            = raw_data,
+            patch_size          = (16,64,64),
+            n_patches_per_image = 1024,
+            save_file           = npz_path,
+        )
+        await api.showStatus('Patches generated: '+str(X.shape))
+        api.log('Patches generated: '+str(X.shape))
+
+        await api.showStatus('Reading test files from ' + data_dir + '/test' )
+        source_file = None
+        target_file = None
+        if os.path.isdir(os.path.join(data_dir, 'test')):
+            source_path = os.path.join(data_dir, 'test', source_dirs[0])
+            target_path = os.path.join(data_dir, 'test', target_dir)
+            if os.path.exists(source_path):
+                source_files = os.listdir(source_path)
+                if len(source_files) > 0:
+                    source_file = os.path.join(source_path, source_files[0])
+                    target_file = os.path.join(target_path, source_files[0])
+                    if not os.path.exists(target_file):
+                        target_file = None
+
+        val_files = ( source_file, target_file, 'ZYX')
+        api.log(f'validation files: {val_files}')
+        await api.showStatus('Data prepared.')
+        return npz_path, val_files
+
+    async def start_train(self, data_file):
+        ret = await api.showDialog( name="Training Configurations", ui= "<br>".join([
+            "CARE Model Name {id: 'model_name', type: 'string', placeholder: 'my_model'}",
+            "Epochs { id: 'epochs', type:'number', placeholder: 30}",
+            "Source folder name { id: 'source_dir', type:'string', placeholder: 'low'}",
+            "Target folder name { id: 'target_dir', type:'string', placeholder: 'GT'}",
+            ]))
+
+        model_name = ret.model_name
+        epochs = int(ret.epochs)
+        source_dir = ret.source_dir
+        target_dir = ret.target_dir
+        source_dirs = [s.strip() for s in source_dir.split(',') if s.strip() != '']
+
+        data_config = {}
+        data_config['source_dirs'] = source_dirs
+        data_config['target_dir'] = target_dir
+        self.dash = await api.createWindow(type="Im2Im-Dashboard", name="CARE Training", w=25, h=20, data={"display_mode": "all", 'metrics': ['loss', 'val_loss', 'mse'], 'callbacks': ['onStep']})
+        await self.dash.setLoading({'status_text': 'Preparing data...', 'loading': True})
+        try:
+            ret = await self.prepare_data(data_file, source_dirs, target_dir)
+            if not ret:
+                api.error('failed to prepare data.')
+                await self.dash.setLoading({'status_text': 'Failed to prepare data', 'loading': False})
+                return
+        except:
+            await self.dash.setLoading({'status_text': 'Failed to prepare data', 'loading': False})
+            return
+        npz_file, val_files = ret
+        await self.dash.setLoading({'status_text': 'Start training', 'loading': True})
+        await loop.run_in_executor(None, self.train, npz_file, epochs, model_name, data_config, val_files)
+
+    async def train_with_url(self):
+        self.dialog.close()
+        url = await api.prompt('Please paste your file url here: ', 'http://csbdeep.bioimagecomputing.com/example_data/tribolium.zip')
+        await self.start_train(url)
+
+    async def train_with_folder(self):
+        self.dialog.close()
+        data_dir = await api.showFileDialog(title="Please select a folder containing the training and testing data as subfolders ‘train’ and ‘test.", root=os.path.join(ROOT_DIR, "CARE-DATA","tribolium"), type= 'directory', engine= api.ENGINE_URL)
+        await self.start_train(data_dir)
+
+    async def train_with_npz(self):
+        self.dialog.close()
+        data_file = await api.showFileDialog(type= 'file', engine= api.ENGINE_URL)
+        await self.start_train(data_file)
+
+    async def predict_folder(self):
+        self.dialog.close()
+        model_dir, care_data_config = await self.select_model()
+        basedir, name = os.path.split(model_dir)
+        model = CARE(config=None, name=name, basedir=basedir)
+
+        # await api.alert('Please select a test folder contains source folder named ' + ','.join(care_data_config['source_dirs']))
+        source_dir_names = ','.join(care_data_config['source_dirs'])
+        test_data_dir = await api.showFileDialog(title=f"Select a folder with test data (contains {source_dir_names})", root=os.path.join(ROOT_DIR, "CARE-DATA","tribolium"), type="directory", engine=api.ENGINE_URL)
+        if os.path.exists(os.path.join(test_data_dir, 'test')):
+            test_data_dir = os.path.join(test_data_dir, 'test')
+        if not all([os.path.exists(os.path.join(test_data_dir, source_dir)) for source_dir in care_data_config['source_dirs']]):
+            await api.alert('You folder does not seem to have the correct format')
+            return
+        else:
+            # TODO: only support one input source at the moment
+            source_dir = os.path.join(test_data_dir, care_data_config['source_dirs'][0])
+            target_dir = os.path.join(test_data_dir, care_data_config['target_dir'])
+            source_images = [os.path.join(source_dir, f) for f in os.listdir(source_dir)]
+            target_images = [os.path.join(target_dir, f) for f in os.listdir(source_dir)]
+
+            api.log(f'source_images: {source_images}; target_images: {target_images}')
+            result_dir = os.path.join(test_data_dir, 'CARE_results')
+            if not os.path.exists(result_dir):
+                os.makedirs(result_dir)
+            result_url = await api.getFileUrl(path=result_dir, engine=api.ENGINE_URL)
+
+            self.dash = await api.createWindow(type="Im2Im-Dashboard", name="CARE Prediction", w=25, h=20, data={"display_mode": "all"})
+            await self.dash.setLoading({'status_text': 'Running prediction...', 'loading': True})
+            axes = 'ZYX'
+            sample_count = 0
+            for x_file, y_file in zip(source_images, target_images):
+                x = imread(x_file)
+                y = imread(y_file) if os.path.exists(os.path.join(target_dir, y_file)) else None
+                restored = model.predict(x, axes)
+                api.log(str(restored.shape) + str(x.shape))
+                _, file_name = os.path.split(x_file)
+                label = str(sample_count) + '_' + file_name
+                if y is not None:
+                    tensor_list = [x, restored, y ]
+                    titles = ['input', "output", 'target']
+                else:
+                    tensor_list = [x, restored ]
+                    titles = ['input', "output"]
+                await plot_all_tensors(self.dash, result_dir, result_url, tensor_list, label, titles)
+                sample_count += 1
+            await self.dash.setLoading({'status_text': f'Prediction finished, {sample_count} sample processed', 'loading': False})
+        api.log('image size ='+ str(x.shape))
+        api.alert('Prediction done.')
+
+    async def select_model(self):
+        self.dialog.close()
+        model_dir = await api.showFileDialog(title="Please select a folder with trained CARE model", root=os.path.join(ROOT_DIR, "CARE-MODELS"), type="directory", engine=api.ENGINE_URL)
+        if not os.path.exists(os.path.join(model_dir, 'config.json')) or not os.path.exists(os.path.join(model_dir, "care_data_config.json")):
+            await api.alert('This folder does not seem to contain a model, please select another one.')
+            return
+
+        with open(os.path.join(model_dir, "care_data_config.json"), "r") as read_file:
+            care_data_config = json.load(read_file)
+
+        return model_dir, care_data_config
+
+    async def show_docs(self):
+        self.dialog.close()
+        try:
+            await self.win_docs.run({'data': {}})
+            self.win_docs.focus()
+        except:
+            self.win_docs = await api.createWindow({
+                    'name': 'Documentation - Care',
+                    'type': 'Tabbed-Docs',
+                    'w':30, 'h':20,
+                    'data': {
+                        'tabs': [
+                            {'name': 'Summary', 'content': await api.getAttachment('summary')},
+                            {'name': 'Getting started', 'content': await api.getAttachment('gettingStarted')},
+                            {'name': 'Data', 'content': await api.getAttachment('data')},
+                            {'name': 'Training', 'content': await api.getAttachment('training')},
+                            {'name': 'Prediction', 'content': await api.getAttachment('prediction')},
+                            {'name': 'FAQ', 'content': await api.getAttachment('faq')}
+                        ]
+                    }
+            })
+            #self.win_docs = await api.createWindow({'name': 'Documentation - CARE','type': 'CARE-docs','w':30, 'h':20,'data': {}})
+            self.win_docs.focus()
+
+    async def export_model(self):
+        self.dialog.close()
+        api.alert('not implemented.')
+
+    async def run(self, ctx):
+        self.dialog = await api.showDialog(type='launchpad', data= [
+                {'name': 'Train with data from the web', 'description': 'Use training data stored as zip provided with an url.', 'callback': self.train_with_url, 'img': 'https://img.icons8.com/color/96/000000/download-2.png'},
+                {'name': 'Train with data from the engine', 'description': 'Use training data stored on a (local or remote) plugin engine.', 'callback': self.train_with_folder, 'img': 'https://img.icons8.com/color/96/000000/opened-folder.png'},
+                {'name': 'Predict', 'description': 'Perform denoising on new images.', 'callback': self.predict_folder, 'img': 'https://img.icons8.com/color/96/000000/double-right.png'},
+                {'name': 'Documentation', 'description': 'Show documentation.', 'callback': self.show_docs, 'img': 'https://img.icons8.com/color/96/000000/help.png'},
+            ]
+        )
+
+api.export(ImJoyPlugin())
+</script>
+
+
+<attachment name="summary">
+<br>
+<p id="care-summary">
+  The CARE framework allows to perform  content-aware restoration of fluorescence microscopy images.
+  In this documentation, we describe the ImJoy implementation of an CARE example to perform 3D denoising.
+ </p>
+
+More details about CARE can be found here:
+
+* **Publication**: Weigert et. al, <a onclick="api.utils.openUrl('https://www.nature.com/articles/s41592-018-0216-7')">Content-aware image restoration: pushing the limits of fluorescence microscopy</a>,
+Nature Methods, 2018
+* **GitHub**: <a onclick="api.utils.openUrl('https://github.com/CSBDeep/CSBDeep')">https://github.com/CSBDeep/CSBDeep</a>
+
+The ImJoy plugins are ported from an **example code** to
+<a onclick="api.utils.openUrl('https://github.com/CSBDeep/CSBDeep/tree/master/examples/denoising3D')">perform denoising of 3D images.</a>
+
+<figure>
+    <img src="https://www.dropbox.com/s/aramdvankqxh9h9/care-dashboard-results.png?dl=1" class="img-responsive p-centered" alt="care-3d-results">
+    <figcaption>Example of CARE denoising: input image, target image, predicted image.</figcaption>
+</figure>
+
+
+## Installing the plugin and main features
+
+If you don't already have the plugin, you can install it from this <a onclick="api.utils.openUrl('https://imjoy.io/#/app?w=care&plugin=oeway/ImJoy-Plugins:CARE@GPU')">**link.**</a>
+
+When starting the CARE plugin, you will see a **central launch pad** allowing to select the task to be performed:
+
+<figure>
+    <img src="https://www.dropbox.com/s/rja3lvzwvihm6wz/care-launchpad.png?dl=1" class="img-responsive p-centered" alt="care-launchpad">
+    <figcaption>Screen shot of CARE plugin launchpad.</figcaption>
+</figure>
+
+
+Some of the **main features** are:
+* Training can be performed either on example data or your own data.
+* Prediction can be performed once the model is trained.
+
+</attachment>
+
+
+<attachment name="gettingStarted">
+<p style="color:#FF0000";>These steps require that data is already on the engine. As an alternative, you can choose the option to train from URL.</p>
+
+Here we describe how to quickly get started with the CARE plugin.
+
+## Select plugin engine and computational mode
+We select a remote engine (`imjoy.pasteur.cloud`) and the GPU computation (`TAG: GPU`) for fast training and prediction.
+
+<figure>
+    <img src="https://www.dropbox.com/s/m4hssh4dr2x4frg/care-gs-engine-tag.gif?dl=1" width="250" class="img-responsive p-centered" alt="gs-setting-up">
+    <figcaption>Select remote engine and GPU tag.</figcaption>
+</figure>
+
+## Training
+We perform training on the example data on the plugin engine.
+We then set the model name to `CARE_demo_v1` and train for 60 epochs.
+
+<figure>
+    <img src="https://www.dropbox.com/s/0bv9mjm8gszmg5e/care-gs-training.gif?dl=1" class="img-responsive p-centered" alt="getting-started-training">
+    <figcaption>Training with CARE.</figcaption>
+</figure>
+
+While the network is training, progress can be monitored **dashboard**: it shows how loss changes, and how
+the trained model performs on validation data.
+
+<figure>
+    <img src="https://www.dropbox.com/s/4hqxua2764qpx04/care-gs-training-progress.gif?dl=1" width="500" class="img-responsive p-centered" alt="getting-started-training">
+    <figcaption>Monitoring training with CARE.</figcaption>
+</figure>
+
+## Prediction
+Prediction with the trained model is performed:
+1. Select trained model `CARE_demo_v1`.
+2. Select test data `test` of provided example on the remote server.
+3. This will open a dedicated interface where prediction progress is shown.
+
+<figure>
+    <img src="https://www.dropbox.com/s/i1rpi9ja84zcdxa/care-gs-prediction.gif?dl=1" class="img-responsive p-centered" alt="getting-started-training">
+    <figcaption>Training with CARE.</figcaption>
+</figure>
+
+Once the prediction is done, you can inspect the prediction results and scroll through the z-stack of the sample.
+
+<figure>
+    <img src="https://www.dropbox.com/s/1sjose7hwbpm883/care-gs-prediction-inspection.gif?dl=1" width="500" class="img-responsive p-centered" alt="getting-started-training">
+    <figcaption>Monitoring training with CARE.</figcaption>
+</figure>
+
+
+</attachment>
+
+<attachment name="data">
+<br>
+<p style="color:#FF0000">
+  FOR IMJOY REVIEWERS: if you use the provided remote-engine, example data is available at `imjoy/imjoy-examples/CARE-DATA`.
+  The respective file-dialogs will initiate at this repository.</p>
+<br>
+<p id="data-requirements">
+Here we describe briefly how the training images have to be provided: image format, naming scheme, and data organization.
+</p>
+
+The provided data from the CARE example is organized like this this:
+* Data for the 3D denoising corresponds to **pairs of low and high high signal-to-noise ratio (SNR) stacks**.
+  Images are 3D TIFF with identical filenames and are stored in two folders "low" and "GT", corresponding
+  to low and high-SNR stacks.
+* The training data for this demo corresponds to **one Tribolium stack pair**, whereas in an actual
+  application the authors recommend to acquire at least 10-50 stacks from different developmental timepoints.
+* Training and validation data are stored in separate folders `train` and `test`.
+
+```
+├─ tribolium/
+│  ├─ test/
+│  │  ├─ GT
+│  │  │  ├─ nGFP_0.1_0.2_0.5_20_14_late.tif
+│  │  ├─ low
+│  │  │  ├─ nGFP_0.1_0.2_0.5_20_14_late.tif
+│  ├─ train/
+│  │  ├─ GT
+│  │  │  ├─ nGFP_0.1_0.2_0.5_20_13_late.tif
+│  │  ├─ low
+│  │  │  ├─ nGFP_0.1_0.2_0.5_20_13_late.tif
+│  │  ├─ img58
+```
+To use these **example data** you have two options
+1. They can be directly used for training with the option `Train with data from the web`.
+ The provided default URLs points to these data.
+2. Alternatively, the data can be downloaded with this <a onclick="api.utils.openUrl('http://csbdeep.bioimagecomputing.com/example_data/tribolium.zip')">**link**.</a>
+ After unzipping, you can load the data into the plugin engine with drag & drop and specify it with the option `Train with data from the engine`.
+
+A detailed description for how to generate the training data can be found
+<a onclick="api.utils.openUrl('https://github.com/CSBDeep/CSBDeep/blob/master/examples/denoising3D/1_datagen.ipynb')">here.</a>
+
+
+</attachment>
+
+<attachment name="training">
+<br>
+<p id="training">
+Here we describe how to select a plugin engine, a computational environment, and the training data to perform training.
+</p>
+
+## Where to perform training: plugin engine
+Training is performed on an ImJoy plugin engine, which can either run remotely or on your
+own local workstation. To install a local plugin engine, please follow
+<a onclick="api.utils.openUrl('https://github.com/oeway/ImJoy-App/releases')">**these instructions.**</a>
+
+Once your ImJoy app is connected to one (or more) plugin engine(s), you can choose on which engine the CARE
+plugin should run. For this press on the icon next to the plugin name in the plugin menu.
+
+<figure>
+    <img src="https://www.dropbox.com/s/6c7eze7eidabdz8/care_plugin_menu.png?dl=1" class="img-responsive p-centered" alt="screen-shot-care">
+    <figcaption>CARE plugin in the plugin menu.</figcaption>
+</figure>
+This will show a dropdown menu, where you can determine how and where the plugin is running.
+In the lower part of the dropdown menu you can then choose on which of the the available plugin engines the plugin should run.
+<figure>
+    <img src="https://www.dropbox.com/s/06wgxikauwv3lmk/care-plugin-engines.png?dl=1" class="img-responsive p-centered" alt="plugin-engines">
+    <figcaption>Choosing the plugin engine.</figcaption>
+</figure>
+
+## GPU or CPU computation
+Training can be performed on CPUs or GPUs. The latter is substantially faster. To switch
+between these computational modes, you can select the corresponding "tag". Currently supported are
+<figure>
+    <img src="https://www.dropbox.com/s/k1ruchskrqtmqak/care-tags.png?dl=1" class="img-responsive p-centered" alt="tags">
+    <figcaption>Choosing between GPU and CPU computing.</figcaption>
+</figure>
+
+## Providing training data
+Two options exist to provide the training, which can be selected from the CARE launchpad prior to start training.
+For either option, we provide the **CARE example data** as a default.
+
+* `Train with data from the web`: here you can specify an URL containing data as a zip archive.
+The default points to the zipped example data.
+* `Train with data from the engine`: here you can select data from a plugin engine. More precisely, you have to select the folder
+ containing the training data, e.g. the folder `tribolium` for the example data.
+
+<figure>
+    <img src="https://www.dropbox.com/s/zm59g9tsp1t55vx/care-select-folder.png?dl=1" class="img-responsive  p-centered" alt="selecting-training-data">
+    <figcaption>Selecting training data from the plugin engine.</figcaption>
+</figure>
+
+You can also provide **your own data**. Your own data has to be organized as explained in the dedicated section **Data**.
+* You can create *a zip archive of your folder*, upload it to the web, and use an URL
+* You can **drag and drop a folder containing subfolders 'train' and 'test'**  into the plugin engine, where the CARE plugin is running:
+    1. In the ImJoy interface, select `Files` and `Open Engine files`.
+    2. If you have multiple plugin engines running, select the engine on which the CARE plugin is running in the upper part of the interface.
+    3. Navigate to the folder where you want to load your data.
+    4. Drag & drop the folder containing subfolders 'train' and 'test' into this folder.
+    5. You can then use this folder for training.
+
+## Configure training for CARE
+Once you specified the data, a dialog will be shown to configure the training. Here you have to specify
+* Under which name the trained model should be stored
+* For how many epochs the training should be performed. There are 20 training steps per epoche. Longer training
+ might improve the prediction but can also lead to overfitting.
+* The name of the folder containing the source images, e.g. the folder `low` containing the low SNR images.
+* The name of the folder containing the target images, e.g. the folder `GT` containing the high SNR images.
+
+<figure>
+    <img src="https://www.dropbox.com/s/e50qi8y5tz4ri4c/care-configure-training.png?dl=1" width="300" class="img-responsive p-centered" alt="training-configuration">
+    <figcaption>Configuration parameters to train the CARE network.</figcaption>
+</figure>
+
+
+## Monitoring training progress
+After launch the training a dashboard will be shown that allows to inspect training progress.
+
+* In the upper part the dashboard shows the loss functions for the training and validation data. You can hoover
+over the curves to see the current value and what loss function it is.
+* In the lower part it shows the prediction results on a randomly selected z-slices of the validation data.
+* The slider allows you to scroll through the different training steps and inspect how the quality
+ of the prediction changes.
+
+If you want to **terminate the training** click on the icon next to the plugin name, and select `Terminate` and close
+the window.
+
+## Trained model
+Once training is finished, the trained model is stored in folder with the specified name in the configuration.
+This folder can found in the current ImJoy workspace in a folder called `models`. You can find the name of your current workspace,
+but hoovering over the four squares in the upper left part of the interface, e.g. `default` for the example below.
+
+<figure>
+    <img src="https://www.dropbox.com/s/cwz7j8nfhc14mkw/care-workspace.gif?dl=1" class="img-responsive p-centered" alt="screen-shot-care">
+    <figcaption>How to identify the current workspace.</figcaption>
+</figure>
+
+To find the trained model,
+1. Click `Files` in the ImJoy interface, and `Open Engine files`.
+2. Select the plugin engine where you performed training, e.g. where the CARE plugin was running.
+3. Navigate to your workspace name. The dialog will initiate for the `default` workspace, if you are in another
+workspace, you have to move up one folder and select your workspace name.
+4. The folder `CARE-MODELS` contains all trained models
+
+</attachment>
+
+<attachment name="prediction">
+<p style="color:#FF0000">
+  FOR IMJOY REVIEWERS: if you use the provided remote-engine, a trained model is available at `imjoy/imjoy-examples/CARE-MODEL`.
+  The respective file-dialogs will initiate at this repository, and you can select the folder `CARE_model_2000steps` to use this model.</p>
+<br>
+Once a model is trained, you can use it for prediction.
+
+Data for prediction has to be stored in a folder with same name as the input images, e.g. `low` in the example data.
+Prediction will then be performed for each image in this folder.
+Results are stored in folder `CARE_results`, where one folder for each data-set with the same name is created. Predictions
+for each z-slice are stored as separate PNGs.
+
+1. Press on `Predict`
+2. Specify the folder containing the trained model.
+3. Specify the folder containg the images you want to process.
+
+This will then open a new interface, where progress on prediction is reported
+
+<figure>
+    <img src="https://www.dropbox.com/s/yybco7e2fz8ue3g/care-prediction.gif?dl=1" class="img-responsive p-centered" alt="screen-shot-care">
+    <figcaption>CARE prediction interface.</figcaption>
+</figure>
+
+</attachment>
+
+
+<attachment name="faq">
+Here we provide answer to frequenty asked questions and encountered problems.
+
+### Example training data is not available on the remote engine
+In case the example data is not available anymore, you can either train with data by specyfing the URL or
+download the data and upload to the remote engine again.
+
+</attachment>
