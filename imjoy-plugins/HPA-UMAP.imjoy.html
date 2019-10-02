@@ -21,7 +21,7 @@ a localization pattern.
   "type": "window",
   "tags": [],
   "ui": "Explore protein localization patterns in HPA images.",
-  "version": "0.3.6",
+  "version": "0.3.7",
   "api_version": "0.1.2",
   "description": "Explore protein localization patterns in HPA images.",
   "icon": "photo",
@@ -215,14 +215,14 @@ class ImJoyPlugin {
             console.log('====>', data.points[i].customdata)
             const id = data.points[i].customdata.id
             //pts = data.points[i].customdata.gene+'\n';
-            const image_base_url = 'https://v18.proteinatlas.org/images/' + id.split('_')[0] + '/' + id.split('_')[1] +'_' + id.split('_')[2] + '_'+ id.split('_')[3]
+            const image_base_url = 'https://images.proteinatlas.org/' + id.split('_')[0] + '/' + id.split('_')[1] +'_' + id.split('_')[2] + '_'+ id.split('_')[3]
             this.app.showImage({url: image_base_url+'_blue.jpg', meta: data.points[i].customdata})
             this.app.showImage({url: image_base_url+'_red.jpg', meta: data.points[i].customdata})
             this.app.showImage({url: image_base_url+'_green.jpg', meta: data.points[i].customdata})
             this.app.showImage({url: image_base_url+'_yellow.jpg', meta: data.points[i].customdata})
             this.app.showImage({url: image_base_url+'_blue_red_green.jpg', meta: data.points[i].customdata})
            
-            const thumbnail_url = 'https://v18.proteinatlas.org/images/' + id.split('_')[0] + '/' + id.split('_')[1] +'_' + id.split('_')[2] + '_'+ id.split('_')[3]+ '_blue_red_green_yellow_thumb.jpg'
+            const thumbnail_url = 'https://images.proteinatlas.org/' + id.split('_')[0] + '/' + id.split('_')[1] +'_' + id.split('_')[2] + '_'+ id.split('_')[3]+ '_blue_red_green_yellow_thumb.jpg'
             this.app.showThumbnail({url: thumbnail_url, meta: data.points[i].customdata})
 
             await api.showStatus(data.points[i].customdata.gene+', '+ data.points[i].customdata['cell_line'] + ', ' + data.points[i].customdata.location+ ', '+data.points[i].customdata.id)
@@ -236,7 +236,7 @@ class ImJoyPlugin {
     document.getElementById('chart').on('plotly_hover', async (data) => {
         for(var i=0; i < data.points.length; i++){
             const id = data.points[i].customdata.id
-            const thumbnail_url = 'https://v18.proteinatlas.org/images/' + id.split('_')[0] + '/' + id.split('_')[1] +'_' + id.split('_')[2] + '_'+ id.split('_')[3]+ '_blue_red_green_yellow_thumb.jpg'
+            const thumbnail_url = 'https://images.proteinatlas.org/' + id.split('_')[0] + '/' + id.split('_')[1] +'_' + id.split('_')[2] + '_'+ id.split('_')[3]+ '_blue_red_green_yellow_thumb.jpg'
             this.app.showThumbnail({url: thumbnail_url, meta: data.points[i].customdata})
         }
     });
