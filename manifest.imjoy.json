@@ -68,13 +68,13 @@
   {
    "name": "DPNUnet",
    "type": "native-python",
-   "version": "0.2.9",
+   "version": "0.2.10",
    "description": "Nuclei segmentation with deep learning.",
    "tags": [
     "GPU"
    ],
    "ui": "",
-   "cover": "https://dl.dropbox.com/s/37aevx965do8qwh/DPN-Unet-v0.2.2.png",
+   "cover": "https://imjoy-team.github.io/example-plugins/dpnunet/dpnunet-cover.png",
    "inputs": null,
    "outputs": null,
    "flags": [],
@@ -153,7 +153,7 @@
      }
     }
    ],
-   "version": "0.1.22",
+   "version": "0.1.23",
    "api_version": "0.1.2",
    "url": "",
    "description": "ShuffleNetV2 for HPA.",
@@ -175,7 +175,7 @@
     "h": 20,
     "standalone": true
    },
-   "cover": "https://dl.dropbox.com/s/87w11rqi5qq1ftb/hpa-classification-v0.1.17.gif",
+   "cover": "https://imjoy-team.github.io/example-plugins/hpa-classification/hpa-classification-cover.gif",
    "uri": "imjoy-plugins/HPA-Classification.imjoy.html"
   },
   {
@@ -206,7 +206,7 @@
    "type": "window",
    "tags": [],
    "ui": "Explore protein localization patterns in HPA images.",
-   "version": "0.3.7",
+   "version": "0.3.8",
    "api_version": "0.1.2",
    "description": "Explore protein localization patterns in HPA images.",
    "icon": "photo",
@@ -226,7 +226,7 @@
     "h": 20,
     "fullscreen": true
    },
-   "cover": "https://kth.box.com/shared/static/epguk8lkho1i5wrukf5q138k2pi4n9kd.gif",
+   "cover": "https://imjoy-team.github.io/example-plugins/hpa-umap/hpa-umap-cover.gif",
    "uri": "imjoy-plugins/HPA-UMAP.imjoy.html"
   },
   {
@@ -234,7 +234,7 @@
    "type": "window",
    "tags": [],
    "ui": "",
-   "version": "0.5.74",
+   "version": "0.5.75",
    "api_version": "0.1.5",
    "description": "An image annotator made with OpenLayers",
    "icon": "extension",
@@ -267,7 +267,7 @@
     "h": 25,
     "fullscreen": true
    },
-   "cover": "https://dl.dropbox.com/s/hmoio1d62vuvito/annotator-v0.5.40.gif",
+   "cover": "https://imjoy-team.github.io/example-plugins/image-annotator/annotator-cover.gif",
    "uri": "imjoy-plugins/ImageAnnotator.imjoy.html"
   },
   {
@@ -380,7 +380,7 @@
   {
    "name": "ANNA-PALM",
    "type": "native-python",
-   "version": "0.1.17",
+   "version": "0.1.18",
    "api_version": "0.1.5",
    "description": "A plugin for training models with ANNA-PALM.",
    "tags": [
@@ -414,22 +414,22 @@
     "oeway/ImJoy-Plugins:launchpad",
     "oeway/ImJoy-Plugins:Tabbed-Docs"
    ],
-   "cover": "https://dl.dropbox.com/s/gja7uhjctell2nd/annapalm-0.1.9.gif",
+   "cover": "https://imjoy-team.github.io/example-plugins/annapalm/annapalm-cover.gif",
    "uri": "imjoy-plugins/annaPalm.imjoy.html"
   },
   {
    "name": "maui-demo",
    "type": "native-python",
    "version": "0.1.0",
-   "description": "A domo plugin for Multi-omics Autoencoder Integration: Deep learning-based heterogenous data analysis toolkit",
+   "description": "A demo plugin for Multi-omics Autoencoder Integration: Deep learning-based heterogenous data analysis toolkit",
    "tags": [],
    "ui": "",
-   "cover": "https://dl.dropbox.com/s/kaugiuiqc6jcjkb/manui-training.png",
+   "cover": "https://imjoy-team.github.io/example-plugins/maui/maui-training.png",
    "inputs": null,
    "outputs": null,
    "flags": [],
    "icon": "extension",
-   "api_version": "0.1.6",
+   "api_version": "0.1.7",
    "env": "conda create -n maui python=3.6",
    "permissions": [],
    "requirements": [

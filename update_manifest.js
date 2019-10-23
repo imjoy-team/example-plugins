@@ -32,19 +32,24 @@ function downloadScripts(){
      https.get("https://raw.githubusercontent.com/oeway/ImJoy/master/web/src/pluginParser.js", (response)=>{
       if(response.statusCode == 200){
         var file = fs.createWriteStream( './pluginParser.js');
+        var code = ''
         response.on('data', (d) => {
-          file.write(d.toString().replace('export function', 'function'));
+          code = code + d.toString()
         });
         response.on('end', () => {
-          file.write('exports.parseComponent = parseComponent;')
+          code = code.replace('export function', 'function')
+          code = code + '\nexports.parseComponent = parseComponent;'
+          file.write(code);
           file.close(()=>{
             https.get("https://raw.githubusercontent.com/oeway/ImJoy/master/web/src/buildManifest.js", (response)=>{
               if(response.statusCode == 200){
-                var file = fs.createWriteStream( './buildManifest.js');
+                var code2 = ''
                 response.on('data', (d) => {
-                  file.write(d.toString());
+                  code2 = code2 + d.toString()
                 });
                 response.on('end', () => {
+                  var file = fs.createWriteStream( './buildManifest.js');
+                  file.write(code2);
                   file.close(resolve);
                 })
               }
@@ -70,8 +75,8 @@ function downloadScripts(){
 
 downloadScripts().then(()=>{
    runScript('./buildManifest.js', ()=>{
-     fs.unlink('./pluginParser.js', ()=>{})
-     fs.unlink('./buildManifest.js', ()=>{})
+    fs.unlink('./pluginParser.js', ()=>{})
+    fs.unlink('./buildManifest.js', ()=>{})
    })
 
 }).catch((err)=>{
