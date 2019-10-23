@@ -25,7 +25,7 @@
   {
    "name": "CARE",
    "type": "native-python",
-   "version": "0.1.15",
+   "version": "0.1.16",
    "api_version": "0.1.2",
    "description": "This plugin demonstrates denoising using CARE.",
    "tags": [
@@ -60,8 +60,7 @@
     "oeway/ImJoy-Plugins:Tabbed-Docs"
    ],
    "cover": [
-    "https://dl.dropbox.com/s/bo8timmql033xy1/CARE-0.1.8.gif",
-    "https://dl.dropbox.com/s/rq5ikbben3xbxge/CARE-0.1.8-2.gif"
+    "https://imjoy-team.github.io/example-plugins/care/care-cover.gif"
    ],
    "uri": "imjoy-plugins/CARE.imjoy.html"
   },
