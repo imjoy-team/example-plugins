@@ -1,17 +1,24 @@
 ﻿
 <docs lang="markdown">
-# ANNA-PALM: deep learning massively accelerates super-resolution localization microscopy
+# ANNA-PALM
+Deep learning powered plugin to massively accelerate super-resolution localization microscopy.
 
-Ouyang et al., Nat. Biotechnol. 2018, doi:10.1038/nbt.4106
+More details about ANNA-PALM can be found here:
 
-Paper on Nature Biotechnology: https://rdcu.be/LGtc
+* **Documentation**: available from the plugin launchpad.
+
+* **Publication**: Ouyang et. al, <a onclick="api.utils.openUrl('https://www.nature.com/articles/nbt.4106')">Deep learning massively accelerates super-resolution localization microscopy</a>,
+Nature Biotechnology, 2018
+
+* **GitHub**: <a onclick="api.utils.openUrl('https://github.com/imodpasteur/ANNA-PALM')">https://github.com/imodpasteur/ANNA-PALM</a>
+
 </docs>
 
 <config lang="json">
 {
   "name": "ANNA-PALM",
   "type": "native-python",
-  "version": "0.1.17",
+  "version": "0.1.18",
   "api_version": "0.1.5",
   "description": "A plugin for training models with ANNA-PALM.",
   "tags": ["CPU", "GPU"],
@@ -29,7 +36,7 @@ Paper on Nature Biotechnology: https://rdcu.be/LGtc
       "oeway/ImJoy-Plugins:launchpad",
       "oeway/ImJoy-Plugins:Tabbed-Docs"
   ],
-  "cover": "https://dl.dropbox.com/s/gja7uhjctell2nd/annapalm-0.1.9.gif"
+  "cover": "https://imjoy-team.github.io/example-plugins/annapalm/annapalm-cover.gif"
   }
 </config>
 
@@ -360,7 +367,7 @@ Here, we provide workflows to train and use ANNA-PALM to reconstruct super-resol
 We further provide example data for PALM experiments performed on microtubules.
 
 <figure>
-    <img src="https://www.dropbox.com/s/4a0f9h8i0svf3h2/anna-palm-example.png?dl=1" width="700" class="img-responsive p-centered" alt="anna-palm-reconstruction">
+    <img src="https://imjoy-team.github.io/example-plugins/annapalm/annapalm-example.png" width="700" class="img-responsive p-centered" alt="annapalm-example">
     <figcaption>Example of ANNA-PALM reconstruction: (left) input = sparse localization image, (right) output = predicted super-resolution image.</figcaption>
 </figure>
 
@@ -371,7 +378,7 @@ If you don't already have the plugin, you can install it from this <a onclick="a
 When starting the ANNA-PALM plugin, you will see a **central launch pad** allowing to select the task to be performed:
 
 <figure>
-    <img src="https://www.dropbox.com/s/ahpjey8fs7flz7q/anna-palm-launchpad.png?dl=1" class="img-responsive p-centered" alt="anna-palm-launchpad">
+    <img src="https://imjoy-team.github.io/example-plugins/annapalm/annapalm-launchpad.png" class="img-responsive p-centered" alt="anna-palm-launchpad">
     <figcaption>ANNA-PALM plugin launchpad.</figcaption>
 </figure>
 
@@ -383,9 +390,6 @@ The **main features** are:
 </attachment>
 
 <attachment name="load-model">
-<br>
-<p style="color:#FF0000"> FOR IMJOY REVIEWERS: if you use the provided remote-engine, a pre-trained model is available at`imjoy/imjoy-examples/ANNA-PALM-MODEL`.</p>
-<br>
 <p>
 Here we describe how to load a pre-trained model that can be used either directly for prediction or for re-training.
 </p>
@@ -405,11 +409,6 @@ This model is then available either for re-training or prediction.
 
 
 <attachment name="training">
-<br>
-<p style="color:#FF0000"> FOR IMJOY REVIEWERS: for immediating testing, you can use the provided remote engine 'imjoy.pasteur.cloud' with the 'GPU' tag.
-  Further, training data for microtubules is already available at 'imjoy/imjoy-examples/ANNA-PALM-DATA'.
-</p>
-<br>
 <p id="training">
 Here we describe how to select a plugin engine, a computational environment, and the training data to perform training.
 </p>
@@ -449,13 +448,13 @@ Once your ImJoy app is connected to one (or more) plugin engine(s), you can choo
 plugin should run. For this press on the icon next to the plugin name in the plugin menu.
 
 <figure>
-    <img src="https://www.dropbox.com/s/mad93spddwgwpif/anna-palm-plugin-entry.png?dl=1" width="350" class="img-responsive p-centered" alt="screen-shot-care">
+    <img src="https://imjoy-team.github.io/example-plugins/annapalm/annapalm-plugin-entry.png" width="350" class="img-responsive p-centered" alt="annapalm-plugin-entry">
     <figcaption>ANNA-PALM plugin in the plugin menu.</figcaption>
 </figure>
 This will show a dropdown menu, where you can determine how and where the plugin is running.
 In the lower part of the dropdown menu you can then choose on which of the the available plugin engines the plugin should run.
 <figure>
-    <img src="https://www.dropbox.com/s/6pb5nzflveo71h5/anna-palm-plugin-engines.png?dl=1" width="200" class="img-responsive p-centered" alt="plugin-engines">
+    <img src="https://imjoy-team.github.io/example-plugins/annapalm/annapalm-plugin-engines.png" width="200" class="img-responsive p-centered" alt="annapalm-plugin-engines">
     <figcaption>Choosing the plugin engine.</figcaption>
 </figure>
 
@@ -463,7 +462,7 @@ In the lower part of the dropdown menu you can then choose on which of the the a
 Training can be performed on CPUs or GPUs. The latter is substantially faster. To switch
 between these computational modes, you can select the corresponding "tag". Currently supported are
 <figure>
-    <img src="https://www.dropbox.com/s/ibbeoefj8pcixv1/anna-palm-plugin-tags.png?dl=1" width="150" class="img-responsive p-centered" alt="tags">
+    <img src="https://imjoy-team.github.io/example-plugins/annapalm/annapalm-plugin-tags.png" width="150" class="img-responsive p-centered" alt="annapalm-tags">
     <figcaption>Choosing between GPU and CPU computing.</figcaption>
 </figure>
 
@@ -474,7 +473,7 @@ over the curves to see the current value and what loss function it is. The slide
  of the prediction changes.
 
 <figure>
-    <img src="https://www.dropbox.com/s/2zn1t6mnognavst/anna-palm-loss.png?dl=1" width="500" class="img-responsive  p-centered" alt="training-loss">
+    <img src="https://imjoy-team.github.io/example-plugins/annapalm/annapalm-loss.png" width="500" class="img-responsive  p-centered" alt="annapalm-loss">
     <figcaption>Transferring training data to the plugin engine.</figcaption>
 </figure>
 
@@ -507,7 +506,7 @@ train a new model. For either option, we refer to the dedicated sections in this
  created data-set.
 
 <figure>
-    <img src="https://www.dropbox.com/s/1hs0jemw183jg9r/anna-palm-prediction.png?dl=1" class="img-responsive p-centered" alt="screen-shot-care">
+    <img src="https://imjoy-team.github.io/example-plugins/annapalm/annapalm-prediction.png" class="img-responsive p-centered" alt="annapalm-prediction">
     <figcaption>ANNA-PALM prediction interface.</figcaption>
 </figure>
 
@@ -525,7 +524,7 @@ You can simply drag and drop a folder containing either training data or model:
 4. Drag & drop the folder from Finder (MacOS) or Explorer (WIN) into the ImJoy file dialog.
 
 <figure>
-    <img src="https://www.dropbox.com/s/6dih56s3buf4y48/anna-palm-load-model-to-engine.gif?dl=1" width="700" class="img-responsive p-centered" alt="load-model-into-engine">
+    <img src="https://imjoy-team.github.io/example-plugins/annapalm/annapalm-load-model-to-engine.gif" width="700" class="img-responsive p-centered" alt="annapalm-load-model-into-engine">
     <figcaption>Load a pre-trained model on a plugin engine.</figcaption>
 </figure>
 
