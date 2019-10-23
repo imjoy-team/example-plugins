@@ -1,4 +1,4 @@
-<docs lang="markdown">
+﻿<docs lang="markdown">
 Plugin framework for nuclear segmentation based on the winning approach (DPNUnet) of the 2018 Kaggle Data Science Bowl.
 
 Plugins for annotation, prediction, and training are provided.
@@ -11,7 +11,7 @@ Plugins for annotation, prediction, and training are provided.
 {
   "name": "DPNUnet",
   "type": "native-python",
-  "version": "0.2.9",
+  "version": "0.2.10",
   "description": "Nuclei segmentation with deep learning.",
   "tags": ["GPU"],
   "ui": "",
@@ -42,7 +42,7 @@ Plugins for annotation, prediction, and training are provided.
                    "oeway/ImJoy-Plugins:ImageAnnotator",
                    "oeway/ImJoy-Plugins:launchpad",
                    "oeway/ImJoy-Plugins:Tabbed-Docs"],
-  "cover": "https://dl.dropbox.com/s/37aevx965do8qwh/DPN-Unet-v0.2.2.png"
+  "cover": "https://imjoy-team.github.io/example-plugins/dpnunet/dpnunet-cover.png"
 }
 </config>
 
@@ -588,7 +588,7 @@ api.export(ImJoyPlugin())
 </p>
 
 <figure>
-    <img src="https://www.dropbox.com/s/8t2dlbfisdyfezc/dpnunet-prediction-example.png?dl=1"  class="img-responsive p-centered" alt="nuclei-segmentaton">
+    <img src="https://imjoy-team.github.io/example-plugins/dpnunet/dpnunet-prediction-example.png"  class="img-responsive p-centered" alt="dpnunet-prediction-example">
     <figcaption>Nuclei segmentation: DAPI (left), predicted masks (right).</figcaption>
 </figure>
 
@@ -604,7 +604,7 @@ possiblity to re-train this model, and use it for prediction after successful te
 When starting the DPNUnet-Segmentation plugin, you will see a **central launch pad** allowing to select the task to be performed:
 
 <figure>
-    <img src="https://www.dropbox.com/s/8komkrwt1tllj6u/dpnunet-launchpad.PNG?dl=1" width="600" class="img-responsive p-centered" alt="segmentation-launchpad">
+    <img src="https://imjoy-team.github.io/example-plugins/dpnunet/dpnunet-launchpad.png" width="600" class="img-responsive p-centered" alt="dpnunet-launchpad">
     <figcaption>Screen shot of DPNUnet-Segmentation launchpad.</figcaption>
 </figure>
 
@@ -634,7 +634,7 @@ connected into a large mesh network.
 Importantly, such a network has to be trained before prediction can be performed.
 
 <figure>
-    <img src="https://www.dropbox.com/s/hbg3c23gwfedu0p/dpnunet-neural_network.png?dl=1" width="280" class="img-responsive p-centered" alt="anna-palm-reconstruction">
+    <img src="https://imjoy-team.github.io/example-plugins/dpnunet/dpnunet-neural_network.png" width="280" class="img-responsive p-centered" alt="dpnunet-neural_network">
     <figcaption>Basic structure of a neural network.</figcaption>
 </figure>
 
@@ -656,7 +656,7 @@ anymore to new data (**overfitting**). Good training finds the sweet spot betwee
 extreme cases.
 
 <figure>
-    <img src="https://www.dropbox.com/s/inlro9emd2yk1y6/dpnunet-training_validation.png?dl=1" width="400" class="img-responsive p-centered" alt="anna-palm-reconstruction">
+    <img src="https://imjoy-team.github.io/example-plugins/dpnunet/dpnunet-training_validation.png" width="400" class="img-responsive p-centered" alt="dpnunet-training_validation">
     <figcaption>Training and validation loss during training.</figcaption>
 </figure>
 
@@ -672,10 +672,6 @@ model is used as the starting point to perform training on the new data.
 
 <attachment name="model">
 <br>
-<p style="color:#FF0000"> FOR IMJOY REVIEWERS: when using the provided remote engine 'imjoy.pasteur.cloud',
-  a pre-trained model will automatically be loaded. You can reload this model from
-  'imjoy/imjoy-examples/SEGMENTATION-MODEL/pretrained-model-dpn-softmax/fold0_best.ph'
-</p>
 
 DPNUnet has been **trained on very divergent biomedical data**, and will perform well on many data-sets
 even without re-training. The model has been trained on nuclei with an average size of around 20 pixels.
@@ -694,18 +690,6 @@ found in the respective section.
 
 
 <attachment name="data">
-<br>
-<p style="color:#FF0000">
-FOR IMJOY REVIEWERS: when using the provided remote engine 'imjoy.pasteur.cloud',
-the two data-set available containing  annotated training data with masks, as well as test data.:
-(1) HeLa cells ('imjoy/imjoy-examples/SEGMENTATION-DATA/HeLa_DAPI_v2'), (2)
-full data-set of the original DPNUnet ('/imjoy/imjoy-examples/data-science-bowl/dsb2018-dataset-v0.1.1'). Both data-sets
-
-These data can be used to test every step in the analysis workflow. To get started, we recommend using
-the smaller HeLa data-set for faster computations.
-
-</p>
-<br>
 <p id="data-requirements">
 Here we describe how the training images have to be provided: image format, naming scheme, and data organization.
 </p>
@@ -755,12 +739,6 @@ This will result in the following folder structure
 </attachment>
 
 <attachment name="annotation">
-<br>
-<p style="color:#FF0000"> FOR IMJOY REVIEWERS: when using the provided remote engine 'imjoy.pasteur.cloud',
-  annotated training data is already available at 'imjoy/imjoy-examples/SEGMENTATION-DATA/HeLa_DAPI_v1'. You can
-  open these data in the Annotator to inspect the annotations, or directly create masks as described below.
-</p>
-<br>
 <p id="annotation">
 This plugin allows to annote the nuclei in the images. The plugin was designed to read the
 above describe folder structure, i.e. opening the folder `data_for_training` will allow to
@@ -781,7 +759,7 @@ It will open with a default image, and you can already familiarize yourself with
 * Annotate different structurs, and toggle display of certain annotations.
 
 <figure>
-    <img src="https://www.dropbox.com/s/71ujzlf8rfzw7t8/dpnunet-annotation.png?dl=1" width="500" class="img-responsive p-centered" alt="segmentation-launchpad">
+    <img src="https://imjoy-team.github.io/example-plugins/dpnunet/dpnunet-annotation.png" width="500" class="img-responsive p-centered" alt="dpnunet-annotation">
     <figcaption>Image annotation in ImJoy.</figcaption>
 </figure>
 
@@ -804,7 +782,7 @@ It will open with a default image, and you can already familiarize yourself with
       0.  Press `Import` to open the Annotator with the specified files.
 
 <figure>
-    <img src="https://www.dropbox.com/s/tket24vfukarmzn/dpnunet-annotator-load-data.gif?dl=1" class="img-responsive p-centered" alt="segmentation-launchpad">
+    <img src="https://imjoy-team.github.io/example-plugins/dpnunet/dpnunet-annotator-load-data.gif" class="img-responsive p-centered" alt="dpnunet-annotator-load-data">
     <figcaption>Image annotation in ImJoy.</figcaption>
 </figure>
 
@@ -827,26 +805,17 @@ The masks will be stored as `nuclei_border_mask.png` for each annotated image.
 
 <div class="container">
   <div class="columns">
-    <div class="column col-xs-4">Annotation<img src="https://www.dropbox.com/s/9ayhcbpevzv757b/dpnunet-nuclei-annotation.png?dl=1" class="img-responsive ..." alt="...">
+    <div class="column col-xs-4">Annotation<img src="https://imjoy-team.github.io/example-plugins/dpnunet/dpnunet-nuclei-annotation.png" class="img-responsive ..." alt="...">
  </div>
-  <div class="column col-xs-4"> Filled mask <img src="https://www.dropbox.com/s/ggrwbrqvpboy9pf/dpnunet-nuclei-mask-fill.png?dl=1" class="img-responsive ..." alt="...">
+  <div class="column col-xs-4"> Filled mask <img src="https://imjoy-team.github.io/example-plugins/dpnunet/dpnunet-nuclei-mask-fill.png" class="img-responsive ..." alt="...">
   </div>
-    <div class="column col-xs-4"> Border mask <img src="https://www.dropbox.com/s/z2mkpyw2mgi9ffx/dpnunet-nuclei-mask-border.png?dl=1" class="img-responsive ..." alt="...">
+    <div class="column col-xs-4"> Border mask <img src="https://imjoy-team.github.io/example-plugins/dpnunet/dpnunet-nuclei-mask-border.png" class="img-responsive ..." alt="...">
   </div>
 </div>
 
 </attachment>
 
 <attachment name="training">
- <br>
-<p style="color:#FF0000"> FOR IMJOY REVIEWERS: when using the provided remote engine 'imjoy.pasteur.cloud',
-  a model is already loaded, and annotated training data with masks is
-  available at 'imjoy/imjoy-examples/SEGMENTATION-DATA/HeLa_DAPI_v1'. You can use these data to try training.
-  but be aware that this model could contain checkpoints from earlier training attempts and will resume from there.
-  To initiate training from the pre-trained model, please load this model into the engine (see section Model).
-</p>
-<br>
-
 Before starting training, you have to provide a model and data. See the 'FAQ' for how to load these into
 the plugin engine.
 1. **trained model** (more details in section 'Model'). The neural network will be initiated
@@ -859,7 +828,7 @@ The actual training is performed with **these steps**:
 0. This will show a configuration dialog, where you can specify the filename of the input images, e.g. `nuclei.png`, and the target masks, e.g. `nuclei_border_mask.png`.
  Further you can specify for how many epochs the network will train, and under which name the model will be saved.
 <figure>
-    <img src="https://www.dropbox.com/s/f0wqnjs67jriabt/dpnunet-training-config.PNG?dl=1" width="300" class="img-responsive p-centered" alt="training-config">
+    <img src="https://imjoy-team.github.io/example-plugins/dpnunet/dpnunet-training-config.png" width="300" class="img-responsive p-centered" alt="dpnunet-training-config">
     <figcaption>Training and validation loss during training.</figcaption>
 </figure>
 0. Specify the data folder containing subfolders 'train' and 'valid'.
@@ -871,11 +840,6 @@ The actual training is performed with **these steps**:
 </attachment>
 
 <attachment name="prediction">
-<br>
-<p style="color:#FF0000"> FOR IMJOY REVIEWERS: you can test the prediction on the two provided test data:
-HeLa cells ('HeLa ...') and the full data-set from the original DPNUnet (dsp2018 ...). The HeLa data-set
-is smaller and prediction will be faster.
-</p>
 
 ## Model for prediction
 Prediction will be performed with best available model. This is either a loaded pre-trained model, or in case
@@ -891,12 +855,12 @@ images should be rescaled such that the nuclei in the images are roughly this si
 0. Select a folder with test data (folder containing a subfolder 'test').
 0. Specify the name of the input images, default name is `nuclei.png`.
 <figure>
-    <img src="https://www.dropbox.com/s/q34dip0milx03iw/dpnunet-prediction-image-name.png?dl=1" width="300" class="img-responsive p-centered" alt="training-config">
+    <img src="https://imjoy-team.github.io/example-plugins/dpnunet/dpnunet-prediction-image-name.png" width="300" class="img-responsive p-centered" alt="dpnunet-prediction-image-name">
     <figcaption>Dialog to specify file-name of input images. </figcaption>
 </figure>
 0. Predicted data will then be shown in a dashboard, where you can use the slider to navigate the different samples.
 <figure>
-    <img src="https://www.dropbox.com/s/a2gphxu25p8e4yl/dpnunet-prediction-dashboard.png?dl=1" width="500" class="img-responsive p-centered" alt="training-config">
+    <img src="https://imjoy-team.github.io/example-plugins/dpnunet/dpnunet-prediction-dashboard.png" width="500" class="img-responsive p-centered" alt="dpnunet-prediction-dashboard">
     <figcaption>Inspecting the prediction results. (Left) original image, (middle) predicted masks, (right) identified nuclei shown as labels. </figcaption>
 </figure>
 0. The predicted masks will be saved as `nuclei_border_mask_output.png` in each sample folder.
@@ -919,7 +883,7 @@ You can simply drag and drop a folder containing either training data or model:
 4. Drag & drop the folder from Finder (MacOS) or Explorer (WIN) into the ImJoy file dialog.
 
 <figure>
-    <img src="https://www.dropbox.com/s/oqofqh7fbnjgb0v/dpnunet-upload.gif?dl=1" width="700" class="img-responsive p-centered" alt="load-model-into-engine">
+    <img src="https://imjoy-team.github.io/example-plugins/dpnunet/dpnunet-upload.gif" width="700" class="img-responsive p-centered" alt="dpnunet-upload">
     <figcaption>Load data on a plugin engine.</figcaption>
 </figure>
 
