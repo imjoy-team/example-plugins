@@ -1,4 +1,4 @@
-<docs lang="markdown">
+﻿<docs lang="markdown">
 # CARE
 
 Weigert et. al, Content-aware image restoration: pushing the limits of fluorescence microscopy, Nature Methods, 2018
@@ -13,7 +13,7 @@ This is a demo plugin ported from https://github.com/CSBDeep/CSBDeep/blob/master
 {
   "name": "CARE",
   "type": "native-python",
-  "version": "0.1.17",
+  "version": "0.1.18",
   "api_version": "0.1.2",
   "description": "This plugin demonstrates denoising using CARE.",
   "tags": ["CPU", "GPU", "macOS CPU"],
@@ -472,7 +472,7 @@ The ImJoy plugins are ported from an **example code** to
 <a onclick="api.utils.openUrl('https://github.com/CSBDeep/CSBDeep/tree/master/examples/denoising3D')">perform denoising of 3D images.</a>
 
 <figure>
-    <img src="https://www.dropbox.com/s/aramdvankqxh9h9/care-dashboard-results.png?dl=1" class="img-responsive p-centered" alt="care-3d-results">
+    <img src="https://imjoy-team.github.io/example-plugins/care/care-dashboard-results.png" class="img-responsive p-centered" alt="care-3d-results">
     <figcaption>Example of CARE denoising: input image, target image, predicted image.</figcaption>
 </figure>
 
@@ -484,7 +484,7 @@ If you don't already have the plugin, you can install it from this <a onclick="a
 When starting the CARE plugin, you will see a **central launch pad** allowing to select the task to be performed:
 
 <figure>
-    <img src="https://www.dropbox.com/s/rja3lvzwvihm6wz/care-launchpad.png?dl=1" class="img-responsive p-centered" alt="care-launchpad">
+    <img src="https://imjoy-team.github.io/example-plugins/care/care-launchpad.png" class="img-responsive p-centered" alt="care-launchpad">
     <figcaption>Screen shot of CARE plugin launchpad.</figcaption>
 </figure>
 
@@ -505,7 +505,7 @@ Here we describe how to quickly get started with the CARE plugin.
 We select a remote engine (`imjoy.pasteur.cloud`) and the GPU computation (`TAG: GPU`) for fast training and prediction.
 
 <figure>
-    <img src="https://www.dropbox.com/s/m4hssh4dr2x4frg/care-gs-engine-tag.gif?dl=1" width="250" class="img-responsive p-centered" alt="gs-setting-up">
+    <img src="https://imjoy-team.github.io/example-plugins/care/care-gs-engine-tag.gif" width="250" class="img-responsive p-centered" alt="care-gs-engine-tag">
     <figcaption>Select remote engine and GPU tag.</figcaption>
 </figure>
 
@@ -514,7 +514,7 @@ We perform training on the example data on the plugin engine.
 We then set the model name to `CARE_demo_v1` and train for 60 epochs.
 
 <figure>
-    <img src="https://www.dropbox.com/s/0bv9mjm8gszmg5e/care-gs-training.gif?dl=1" class="img-responsive p-centered" alt="getting-started-training">
+    <img src="https://imjoy-team.github.io/example-plugins/care/care-gs-training.gif" class="img-responsive p-centered" alt="care-gs-training">
     <figcaption>Training with CARE.</figcaption>
 </figure>
 
@@ -522,7 +522,7 @@ While the network is training, progress can be monitored **dashboard**: it shows
 the trained model performs on validation data.
 
 <figure>
-    <img src="https://www.dropbox.com/s/4hqxua2764qpx04/care-gs-training-progress.gif?dl=1" width="500" class="img-responsive p-centered" alt="getting-started-training">
+    <img src="https://imjoy-team.github.io/example-plugins/care/care-gs-training-progress.gif" width="500" class="img-responsive p-centered" alt="care-gs-training-progress">
     <figcaption>Monitoring training with CARE.</figcaption>
 </figure>
 
@@ -533,14 +533,14 @@ Prediction with the trained model is performed:
 3. This will open a dedicated interface where prediction progress is shown.
 
 <figure>
-    <img src="https://www.dropbox.com/s/i1rpi9ja84zcdxa/care-gs-prediction.gif?dl=1" class="img-responsive p-centered" alt="getting-started-training">
+    <img src="https://imjoy-team.github.io/example-plugins/care/care-gs-prediction.gif" class="img-responsive p-centered" alt="care-gs-prediction">
     <figcaption>Training with CARE.</figcaption>
 </figure>
 
 Once the prediction is done, you can inspect the prediction results and scroll through the z-stack of the sample.
 
 <figure>
-    <img src="https://www.dropbox.com/s/1sjose7hwbpm883/care-gs-prediction-inspection.gif?dl=1" width="500" class="img-responsive p-centered" alt="getting-started-training">
+    <img src="https://imjoy-team.github.io/example-plugins/care/care-gs-prediction-inspection.gif" width="500" class="img-responsive p-centered" alt="care-gs-prediction-inspectio">
     <figcaption>Monitoring training with CARE.</figcaption>
 </figure>
 
@@ -548,11 +548,6 @@ Once the prediction is done, you can inspect the prediction results and scroll t
 </attachment>
 
 <attachment name="data">
-<br>
-<p style="color:#FF0000">
-  FOR IMJOY REVIEWERS: if you use the provided remote-engine, example data is available at `imjoy/imjoy-examples/CARE-DATA`.
-  The respective file-dialogs will initiate at this repository.</p>
-<br>
 <p id="data-requirements">
 Here we describe briefly how the training images have to be provided: image format, naming scheme, and data organization.
 </p>
@@ -693,10 +688,6 @@ workspace, you have to move up one folder and select your workspace name.
 </attachment>
 
 <attachment name="prediction">
-<p style="color:#FF0000">
-  FOR IMJOY REVIEWERS: if you use the provided remote-engine, a trained model is available at `imjoy/imjoy-examples/CARE-MODEL`.
-  The respective file-dialogs will initiate at this repository, and you can select the folder `CARE_model_2000steps` to use this model.</p>
-<br>
 Once a model is trained, you can use it for prediction.
 
 Data for prediction has to be stored in a folder with same name as the input images, e.g. `low` in the example data.

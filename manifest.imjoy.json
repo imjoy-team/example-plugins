@@ -25,7 +25,7 @@
   {
    "name": "CARE",
    "type": "native-python",
-   "version": "0.1.16",
+   "version": "0.1.18",
    "api_version": "0.1.2",
    "description": "This plugin demonstrates denoising using CARE.",
    "tags": [
@@ -45,13 +45,13 @@
    },
    "requirements": {
     "CPU": [
-     "pip: tensorflow==1.8.0 Pillow csbdeep tifffile six"
+     "pip: tensorflow==1.8.0 keras==2.1.5 Pillow csbdeep==0.4.1 tifffile six"
     ],
     "GPU": [
-     "pip: tensorflow-gpu==1.8.0 Pillow csbdeep tifffile six gputil"
+     "pip: tensorflow-gpu==1.8.0 keras==2.1.5 Pillow csbdeep==0.4.1 tifffile six gputil"
     ],
     "macOS CPU": [
-     "pip: tensorflow==1.5.0 Pillow csbdeep tifffile six"
+     "pip: tensorflow==1.5.0 keras==2.1.5 Pillow csbdeep==0.4.1 tifffile six"
     ]
    },
    "dependencies": [
@@ -205,7 +205,7 @@
    "type": "window",
    "tags": [],
    "ui": "Explore protein localization patterns in HPA images.",
-   "version": "0.3.8",
+   "version": "0.3.9",
    "api_version": "0.1.2",
    "description": "Explore protein localization patterns in HPA images.",
    "icon": "photo",
