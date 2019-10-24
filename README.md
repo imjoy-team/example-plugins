@@ -1,8 +1,14 @@
 # Repository contains plugins for [ImJoy](https://imjoy.io)
-
 Plugin repository for ImJoy.IO, with a special focus on deep learning applications.
+For more details on ImJoy, see <https://github.com/oeway/ImJoy>.
 
-See <https://github.com/oeway/ImJoy> for more details.
+These example plugins are described in our publication [Ouyang et al., arXiv:1905.13105, ImJoy: an open-source computational platform for the deep learning era](https://arxiv.org/abs/1905.13105).
+
+The provided version are frozen at the time of publication. For more recent version, 
+please also visit the plugin repositories
+
+* [**ImJoy Plugins**](https://github.com/oeway/ImJoy-Plugins)
+* [**ImJoy Demo Plugins**](https://github.com/oeway/ImJoy-Demo-Plugins)
 
 ## Dependencies and tags
 The provided deep learning plugins are built on open-source Python libraries
