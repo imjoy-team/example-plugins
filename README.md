@@ -45,7 +45,7 @@ file an issue [here](https://github.com/imjoy-team/example-plugins/issues).
 | ------------------------ | --- | --- | ------------------------------------------------------------------------------- |
 | Ubuntu 16.04             | [X] | [X] | Application pod running on a NVIDIA DGX-1 node, with 4 Tesla V100 GPUs          |
 | MacOS ( Mojave 10.14.4 ) | [X] | [ ] | iMac (Retina 5K, 27-inch, Late 2014), 3.5 GHz Intel Core i5,32 GB 1600 MHz DDR3 |
-| Window 10                | [ ] | [ ] | Not tested yet                                                                  |
+| Window 10                | [X] | [ ] | Windows 10 (Core i7 16GB DDR4)                                                  |
 
 
 
