@@ -13,10 +13,10 @@ This is a demo plugin ported from https://github.com/CSBDeep/CSBDeep/blob/master
 {
   "name": "CARE",
   "type": "native-python",
-  "version": "0.1.18",
+  "version": "0.1.19",
   "api_version": "0.1.2",
   "description": "This plugin demonstrates denoising using CARE.",
-  "tags": ["CPU", "GPU", "macOS CPU"],
+  "tags": ["Linux CPU", "Linux GPU", "Windows CPU", "Windows GPU", "MacOS CPU"],
   "ui": "",
   "inputs": null,
   "outputs": null,
@@ -28,16 +28,18 @@ This is a demo plugin ported from https://github.com/CSBDeep/CSBDeep/blob/master
       "macOS CPU": "conda create -n care-mac-cpu python=3.6.7"
   },
   "requirements": {
-      "CPU": ["pip: tensorflow==1.8.0 keras==2.1.5 Pillow csbdeep==0.4.1 tifffile six"],
-      "GPU": ["pip: tensorflow-gpu==1.8.0 keras==2.1.5 Pillow csbdeep==0.4.1 tifffile six gputil"],
-      "macOS CPU": ["pip: tensorflow==1.5.0 keras==2.1.5 Pillow csbdeep==0.4.1 tifffile six"]
+      "Linux CPU": ["pip: tensorflow==1.8.0 keras==2.1.5 Pillow csbdeep==0.4.1 tifffile six"],
+      "Linux GPU": ["pip: tensorflow-gpu==1.8.0 keras==2.1.5 Pillow csbdeep==0.4.1 tifffile six gputil"],
+      "Windows CPU": ["pip: tensorflow==1.15.0 keras==2.1.5 Pillow csbdeep==0.4.1 tifffile six"],
+      "Windows GPU": ["pip: tensorflow-gpu==1.15.0 keras==2.1.5 Pillow csbdeep==0.4.1 tifffile six gputil"],
+      "MacOS CPU": ["pip: tensorflow==1.5.0 keras==2.1.5 Pillow csbdeep==0.4.1 tifffile six"]
   },
   "dependencies": [
       "oeway/ImJoy-Plugins:Im2Im-Dashboard",
       "oeway/ImJoy-Plugins:launchpad",
       "oeway/ImJoy-Plugins:Tabbed-Docs"
   ],
-  "cover": ["https://imjoy-team.github.io/example-plugins/care/care-cover.gif"]
+  "cover": ["https://oeway.github.io/ImJoy-Plugins/care/care-cover.gif"]
  }
 </config>
 
@@ -472,7 +474,7 @@ The ImJoy plugins are ported from an **example code** to
 <a onclick="api.utils.openUrl('https://github.com/CSBDeep/CSBDeep/tree/master/examples/denoising3D')">perform denoising of 3D images.</a>
 
 <figure>
-    <img src="https://imjoy-team.github.io/example-plugins/care/care-dashboard-results.png" class="img-responsive p-centered" alt="care-3d-results">
+    <img src="https://oeway.github.io/ImJoy-Plugins/care/care-dashboard-results.png" class="img-responsive p-centered" alt="care-dashboard-results.png">
     <figcaption>Example of CARE denoising: input image, target image, predicted image.</figcaption>
 </figure>
 
@@ -484,7 +486,7 @@ If you don't already have the plugin, you can install it from this <a onclick="a
 When starting the CARE plugin, you will see a **central launch pad** allowing to select the task to be performed:
 
 <figure>
-    <img src="https://imjoy-team.github.io/example-plugins/care/care-launchpad.png" class="img-responsive p-centered" alt="care-launchpad">
+    <img src="https://oeway.github.io/ImJoy-Plugins/care/care-launchpad.png" class="img-responsive p-centered" alt="care-launchpad.png">
     <figcaption>Screen shot of CARE plugin launchpad.</figcaption>
 </figure>
 
@@ -505,7 +507,7 @@ Here we describe how to quickly get started with the CARE plugin.
 We select a remote engine (`imjoy.pasteur.cloud`) and the GPU computation (`TAG: GPU`) for fast training and prediction.
 
 <figure>
-    <img src="https://imjoy-team.github.io/example-plugins/care/care-gs-engine-tag.gif" width="250" class="img-responsive p-centered" alt="care-gs-engine-tag">
+    <img src="https://oeway.github.io/ImJoy-Plugins/care/care-gs-engine-tag.gif" width="250" class="img-responsive p-centered" alt="care-gs-engine-tag.gif">
     <figcaption>Select remote engine and GPU tag.</figcaption>
 </figure>
 
@@ -514,7 +516,7 @@ We perform training on the example data on the plugin engine.
 We then set the model name to `CARE_demo_v1` and train for 60 epochs.
 
 <figure>
-    <img src="https://imjoy-team.github.io/example-plugins/care/care-gs-training.gif" class="img-responsive p-centered" alt="care-gs-training">
+    <img src="https://oeway.github.io/ImJoy-Plugins/care/care-gs-training.gif" class="img-responsive p-centered" alt="care-gs-training.gif">
     <figcaption>Training with CARE.</figcaption>
 </figure>
 
@@ -522,7 +524,7 @@ While the network is training, progress can be monitored **dashboard**: it shows
 the trained model performs on validation data.
 
 <figure>
-    <img src="https://imjoy-team.github.io/example-plugins/care/care-gs-training-progress.gif" width="500" class="img-responsive p-centered" alt="care-gs-training-progress">
+    <img src="https://oeway.github.io/ImJoy-Plugins/care/care-gs-training-progress.gif" width="500" class="img-responsive p-centered" alt="care-gs-training-progress.gif">
     <figcaption>Monitoring training with CARE.</figcaption>
 </figure>
 
@@ -533,14 +535,14 @@ Prediction with the trained model is performed:
 3. This will open a dedicated interface where prediction progress is shown.
 
 <figure>
-    <img src="https://imjoy-team.github.io/example-plugins/care/care-gs-prediction.gif" class="img-responsive p-centered" alt="care-gs-prediction">
+    <img src="https://oeway.github.io/ImJoy-Plugins/care/care-gs-prediction.gif" class="img-responsive p-centered" alt="care-gs-prediction.gif">
     <figcaption>Training with CARE.</figcaption>
 </figure>
 
 Once the prediction is done, you can inspect the prediction results and scroll through the z-stack of the sample.
 
 <figure>
-    <img src="https://imjoy-team.github.io/example-plugins/care/care-gs-prediction-inspection.gif" width="500" class="img-responsive p-centered" alt="care-gs-prediction-inspectio">
+    <img src="https://oeway.github.io/ImJoy-Plugins/care/care-gs-prediction-inspection.gif" width="500" class="img-responsive p-centered" alt="care-gs-prediction-inspection.gif">
     <figcaption>Monitoring training with CARE.</figcaption>
 </figure>
 
@@ -601,13 +603,13 @@ Once your ImJoy app is connected to one (or more) plugin engine(s), you can choo
 plugin should run. For this press on the icon next to the plugin name in the plugin menu.
 
 <figure>
-    <img src="https://www.dropbox.com/s/6c7eze7eidabdz8/care_plugin_menu.png?dl=1" class="img-responsive p-centered" alt="screen-shot-care">
+    <img src="https://oeway.github.io/ImJoy-Plugins/care/care-plugin-menu.png" class="img-responsive p-centered" alt="care_plugin_menu.png">
     <figcaption>CARE plugin in the plugin menu.</figcaption>
 </figure>
 This will show a dropdown menu, where you can determine how and where the plugin is running.
 In the lower part of the dropdown menu you can then choose on which of the the available plugin engines the plugin should run.
 <figure>
-    <img src="https://www.dropbox.com/s/06wgxikauwv3lmk/care-plugin-engines.png?dl=1" class="img-responsive p-centered" alt="plugin-engines">
+    <img src="https://oeway.github.io/ImJoy-Plugins/care/care-plugin-engines.png" class="img-responsive p-centered" alt="care-plugin-engines.png">
     <figcaption>Choosing the plugin engine.</figcaption>
 </figure>
 
@@ -615,7 +617,7 @@ In the lower part of the dropdown menu you can then choose on which of the the a
 Training can be performed on CPUs or GPUs. The latter is substantially faster. To switch
 between these computational modes, you can select the corresponding "tag". Currently supported are
 <figure>
-    <img src="https://www.dropbox.com/s/k1ruchskrqtmqak/care-tags.png?dl=1" class="img-responsive p-centered" alt="tags">
+    <img src="https://oeway.github.io/ImJoy-Plugins/care/care-tags.png" class="img-responsive p-centered" alt="care-tags.png">
     <figcaption>Choosing between GPU and CPU computing.</figcaption>
 </figure>
 
@@ -629,7 +631,7 @@ The default points to the zipped example data.
  containing the training data, e.g. the folder `tribolium` for the example data.
 
 <figure>
-    <img src="https://www.dropbox.com/s/zm59g9tsp1t55vx/care-select-folder.png?dl=1" class="img-responsive  p-centered" alt="selecting-training-data">
+    <img src="https://oeway.github.io/ImJoy-Plugins/care/care-select-folder.png" class="img-responsive  p-centered" alt="care-select-folder.png">
     <figcaption>Selecting training data from the plugin engine.</figcaption>
 </figure>
 
@@ -651,7 +653,7 @@ Once you specified the data, a dialog will be shown to configure the training. H
 * The name of the folder containing the target images, e.g. the folder `GT` containing the high SNR images.
 
 <figure>
-    <img src="https://www.dropbox.com/s/e50qi8y5tz4ri4c/care-configure-training.png?dl=1" width="300" class="img-responsive p-centered" alt="training-configuration">
+    <img src="https://oeway.github.io/ImJoy-Plugins/care/care-configure-training.png" width="300" class="img-responsive p-centered" alt="care-configure-training.png">
     <figcaption>Configuration parameters to train the CARE network.</figcaption>
 </figure>
 
@@ -674,7 +676,7 @@ This folder can found in the current ImJoy workspace in a folder called `models`
 but hoovering over the four squares in the upper left part of the interface, e.g. `default` for the example below.
 
 <figure>
-    <img src="https://www.dropbox.com/s/cwz7j8nfhc14mkw/care-workspace.gif?dl=1" class="img-responsive p-centered" alt="screen-shot-care">
+    <img src="https://oeway.github.io/ImJoy-Plugins/care/care-workspace.gif" class="img-responsive p-centered" alt="care-workspace.gif">
     <figcaption>How to identify the current workspace.</figcaption>
 </figure>
 
@@ -702,7 +704,7 @@ for each z-slice are stored as separate PNGs.
 This will then open a new interface, where progress on prediction is reported
 
 <figure>
-    <img src="https://www.dropbox.com/s/yybco7e2fz8ue3g/care-prediction.gif?dl=1" class="img-responsive p-centered" alt="screen-shot-care">
+    <img src="https://oeway.github.io/ImJoy-Plugins/care/care-prediction.gif" class="img-responsive p-centered" alt="care-prediction.gif">
     <figcaption>CARE prediction interface.</figcaption>
 </figure>
 
