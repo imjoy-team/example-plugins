@@ -124,7 +124,7 @@
   {
    "name": "DeepBindScan",
    "type": "native-python",
-   "version": "0.2.14",
+   "version": "0.2.15",
    "api_version": "0.1.3",
    "description": "Predict binding affinity of TF/RBP to a given DNA/RNA sequence.",
    "tags": [],
@@ -136,7 +136,7 @@
    "env": "conda create -n deepbindscan python=3.6.8",
    "requirements": [
     "conda: h5py bioconda::pybedtools bioconda::pyfaidx numpy pandas",
-    "pip: -U tensorflow==1.8.0 keras==2.1.6 kipoi kipoiseq"
+    "pip: -U tensorflow==1.15.0 keras==2.1.6 kipoi kipoiseq"
    ],
    "dependencies": [
     "imjoy-team/example-plugins:SchemaIO"

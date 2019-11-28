@@ -15,21 +15,21 @@ the prediction will then take several minutes.
 
 <config lang="json">
 {
-  "name": "DeepBindScan",
-  "type": "native-python",
-  "version": "0.2.14",
-  "api_version": "0.1.3",
-  "description": "Predict binding affinity of TF/RBP to a given DNA/RNA sequence.",
-  "tags": [],
-  "ui": "",
-  "inputs": null,
-  "outputs": null,
-  "flags": [],
-  "icon": "extension",
-  "env": "conda create -n deepbindscan python=3.6.8",
-  "requirements": ["conda: h5py bioconda::pybedtools bioconda::pyfaidx numpy pandas", "pip: -U tensorflow==1.8.0 keras==2.1.6 kipoi kipoiseq"],
-  "dependencies": ["imjoy-team/example-plugins:SchemaIO"],
-  "cmd": "KERAS_BACKEND=tensorflow python"
+    "name": "DeepBindScan",
+    "type": "native-python",
+    "version": "0.2.15",
+    "api_version": "0.1.3",
+    "description": "Predict binding affinity of TF/RBP to a given DNA/RNA sequence.",
+    "tags": [],
+    "ui": "",
+    "inputs": null,
+    "outputs": null,
+    "flags": [],
+    "icon": "extension",
+    "env": "conda create -n deepbindscan python=3.6.8",
+    "requirements": ["conda: h5py bioconda::pybedtools bioconda::pyfaidx numpy pandas", "pip: -U tensorflow==1.15.0 keras==2.1.6 kipoi kipoiseq"],
+    "dependencies": ["imjoy-team/example-plugins:SchemaIO"],
+    "cmd": "KERAS_BACKEND=tensorflow python"
 }
 </config>
 
@@ -119,8 +119,8 @@ class ImJoyPlugin():
                 "title": "Input settings",
                 "schema": schema,
                 "model": {
-                  "DNA": default_sequence,
-                  "modelType": model_types[0]},
+                    "DNA": default_sequence,
+                    "modelType": model_types[0]},
                 "callback":  self.show_schema_data,
                 "show": True,
                 "formOptions": {
@@ -155,9 +155,9 @@ class ImJoyPlugin():
         dtype = None
         alphabet = "ACGT"
         input_transform = ReorderedOneHot(alphabet=alphabet,
-                                          dtype=dtype,
-                                          alphabet_axis=alphabet_axis,
-                                          dummy_axis=dummy_axis)
+                                            dtype=dtype,
+                                            alphabet_axis=alphabet_axis,
+                                            dummy_axis=dummy_axis)
         if len(ret['DNA']) < 101:
             await api.alert('Sequence length should be 101')
             return
