@@ -13,7 +13,7 @@ This is a demo plugin ported from https://github.com/CSBDeep/CSBDeep/blob/master
 {
   "name": "CARE",
   "type": "native-python",
-  "version": "0.1.19",
+  "version": "0.1.20",
   "api_version": "0.1.2",
   "description": "This plugin demonstrates denoising using CARE.",
   "tags": ["Linux CPU", "Linux GPU", "Windows CPU", "Windows GPU", "MacOS CPU"],
@@ -28,8 +28,8 @@ This is a demo plugin ported from https://github.com/CSBDeep/CSBDeep/blob/master
       "macOS CPU": "conda create -n care-mac-cpu python=3.6.7"
   },
   "requirements": {
-      "Linux CPU": ["pip: tensorflow==1.8.0 keras==2.1.5 Pillow csbdeep==0.4.1 tifffile six"],
-      "Linux GPU": ["pip: tensorflow-gpu==1.8.0 keras==2.1.5 Pillow csbdeep==0.4.1 tifffile six gputil"],
+      "Linux CPU": ["pip: tensorflow==1.15.0 keras==2.1.5 Pillow csbdeep==0.4.1 tifffile six"],
+      "Linux GPU": ["pip: tensorflow-gpu==1.15.0 keras==2.1.5 Pillow csbdeep==0.4.1 tifffile six gputil"],
       "Windows CPU": ["pip: tensorflow==1.15.0 keras==2.1.5 Pillow csbdeep==0.4.1 tifffile six"],
       "Windows GPU": ["pip: tensorflow-gpu==1.15.0 keras==2.1.5 Pillow csbdeep==0.4.1 tifffile six gputil"],
       "MacOS CPU": ["pip: tensorflow==1.5.0 keras==2.1.5 Pillow csbdeep==0.4.1 tifffile six"]

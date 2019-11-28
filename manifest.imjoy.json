@@ -25,7 +25,7 @@
   {
    "name": "CARE",
    "type": "native-python",
-   "version": "0.1.19",
+   "version": "0.1.20",
    "api_version": "0.1.2",
    "description": "This plugin demonstrates denoising using CARE.",
    "tags": [
@@ -47,10 +47,10 @@
    },
    "requirements": {
     "Linux CPU": [
-     "pip: tensorflow==1.8.0 keras==2.1.5 Pillow csbdeep==0.4.1 tifffile six"
+     "pip: tensorflow==1.15.0 keras==2.1.5 Pillow csbdeep==0.4.1 tifffile six"
     ],
     "Linux GPU": [
-     "pip: tensorflow-gpu==1.8.0 keras==2.1.5 Pillow csbdeep==0.4.1 tifffile six gputil"
+     "pip: tensorflow-gpu==1.15.0 keras==2.1.5 Pillow csbdeep==0.4.1 tifffile six gputil"
     ],
     "Windows CPU": [
      "pip: tensorflow==1.15.0 keras==2.1.5 Pillow csbdeep==0.4.1 tifffile six"
@@ -213,7 +213,7 @@
    "type": "window",
    "tags": [],
    "ui": "Explore protein localization patterns in HPA images.",
-   "version": "0.3.9",
+   "version": "0.3.11",
    "api_version": "0.1.2",
    "description": "Explore protein localization patterns in HPA images.",
    "icon": "photo",
@@ -233,7 +233,7 @@
     "h": 20,
     "fullscreen": true
    },
-   "cover": "https://imjoy-team.github.io/example-plugins/hpa-umap/hpa-umap-cover.gif",
+   "cover": "https://oeway.github.io/ImJoy-Plugins/hpa-umap/hpa-umap-cover.gif",
    "uri": "imjoy-plugins/HPA-UMAP.imjoy.html"
   },
   {
