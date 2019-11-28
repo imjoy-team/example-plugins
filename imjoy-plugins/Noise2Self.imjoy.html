@@ -13,26 +13,26 @@ Authors: Joshua Batson, Loic Royer
 
 <config lang="json">
 {
-  "name": "Noise2Self",
-  "type": "native-python",
-  "version": "0.1.8",
-  "tags": ["CPU", "GPU"],
-  "api_version": "0.1.2",
-  "description": "A demo plugin for Noise2Self (Blind Denoising by Self-Supervision)",
-  "ui": "training steps:{id:'steps', type:'number', min:1, placeholder:1000}",
-  "inputs": null,
-  "outputs": null,
-  "flags": [],
-  "icon": "extension",
-  "env": {
+    "name": "Noise2Self",
+    "type": "native-python",
+    "version": "0.1.9",
+    "tags": ["CPU", "GPU"],
+    "api_version": "0.1.2",
+    "description": "A demo plugin for Noise2Self (Blind Denoising by Self-Supervision)",
+    "ui": "training steps:{id:'steps', type:'number', min:1, placeholder:1000}",
+    "inputs": null,
+    "outputs": null,
+    "flags": [],
+    "icon": "extension",
+    "env": {
     "CPU": "conda create -n noise2self-cpu python=3.6.2",
     "GPU": "conda create -n noise2self-gpu python=3.6.2"
-  },
-  "requirements": {
+    },
+    "requirements": {
     "CPU": ["repo:https://github.com/czbiohub/noise2self.git", "conda: -c pytorch six pillow numpy scipy pytorch=1.0 torchvision"],
     "GPU": ["repo:https://github.com/czbiohub/noise2self.git", "conda: -c pytorch six pillow numpy scipy cudatoolkit=9.0 pytorch=1.0 torchvision"]
-  },
-  "dependencies": ["oeway/ImJoy-Plugins:Im2Im-Dashboard"]
+    },
+    "dependencies": ["oeway/ImJoy-Plugins:Im2Im-Dashboard"]
 }
 </config>
 
@@ -55,11 +55,11 @@ if api.TAG == 'GPU' and gpu_available:
 else:
     REPORT_INTERVAL = 1
 
-mnist_train = MNIST('../data/MNIST', download = True,
+mnist_train = MNIST('data/MNIST', download = True,
                     transform = transforms.Compose([
                         transforms.ToTensor(),
                     ]), train = True)
-mnist_test = MNIST('../data/MNIST', download = True,
+mnist_test = MNIST('data/MNIST', download = True,
                     transform = transforms.Compose([
                         transforms.ToTensor(),
                     ]), train = False)
@@ -144,3 +144,4 @@ class ImJoyPlugin():
                 break
 api.export(ImJoyPlugin())
 </script>
+    
