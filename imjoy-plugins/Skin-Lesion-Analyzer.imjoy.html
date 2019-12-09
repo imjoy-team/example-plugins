@@ -21,7 +21,7 @@ https://www.kaggle.com/vbookshelf/skin-lesion-analyzer-tensorflow-js-web-app
   "type": "window",
   "tags": [],
   "ui": "A pretrained MobileNet image classifier for images of skin lesion built with Tensorflow.js",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "api_version": "0.1.2",
   "description": "A pretrained MobileNet image classifier built with Tensorflow.js",
   "icon": "extension",
@@ -54,7 +54,7 @@ SKIN_CLASSES = {
 class ImJoyPlugin {
   async setup() {
 
-    api.alert('Disclaimer: this plugin is intended for academic research only and not for medical diagnostics.')
+    api.alert('Disclaimer: this plugin is intended for academic research only and not for medical diagnostics. The model was trained on 7 skin lesions types, it does NOT know normal skin.')
 
     // bind predict() to the button
     const predictBtn = document.getElementById('predict-btn');
