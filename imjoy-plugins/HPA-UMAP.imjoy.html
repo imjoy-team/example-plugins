@@ -304,6 +304,7 @@ class ImJoyPlugin {
             })
             //colorscale: 'Viridis'
         },
+        text: dataObj.info,
         x: dataObj.x,
         y: dataObj.y,
         customdata: table
@@ -323,7 +324,9 @@ class ImJoyPlugin {
             this.app.$forceUpdate()
         },
         complete: (results) => {
-
+            for(let loc of results.data){
+                loc.info = loc.gene + '(' + loc.cell_line + ')' + ': ' + loc.location
+            }
             this.app.loading = false
             this.app.$forceUpdate()
             console.log('===============>', results)
