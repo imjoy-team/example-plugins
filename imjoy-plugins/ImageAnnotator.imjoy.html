@@ -35,23 +35,23 @@ These example data can be found [**here**](https://www.dropbox.com/sh/i0pzlgvayu
 To import your data follow the steps listed below and also shown in the animated gif:
 1. Press `File`, then `Import Samples`
 2. In the next dialog, press `Choose Files` and then `Select local files` to load
-   files from your local computer, or `Select engine files` to load from files
-  from one of the connected plugin engines.
+    files from your local computer, or `Select engine files` to load from files
+    from one of the connected plugin engines.
 3. Select the folder containing the sample folders, e.g. `data_for_annotation` in the
-   example data. When choosing the option `Select local files`, a warning dialog
-   will be displayed. This is a default security measure of the browser, please confirm.
-  Data will not be uploaded at this step, but only the folders scanned for the existing files.
+    example data. When choosing the option `Select local files`, a warning dialog
+    will be displayed. This is a default security measure of the browser, please confirm.
+    Data will not be uploaded at this step, but only the folders scanned for the existing files.
 4. The interface will then be populated with the different folders and the contained files.
-   Each file is symbolised by a little item, hoovering over the item will show the file-name.
-   To actually load the data, filters have to be defined which files should be loaded and
-   how this file should be called. For instance, you can specify as a `channel name` 'Cells' and as the `filter` 'cells.png'.
-   The plugin will then import for each folder a file containing the string 'cells.png'
-   as name this channel 'Cells'. Clicking on the file icon will automatically populate
-   these fields with a suggestion. To add a channel press `Add channel`
+    Each file is symbolised by a little item, hoovering over the item will show the file-name.
+    To actually load the data, filters have to be defined which files should be loaded and
+    how this file should be called. For instance, you can specify as a `channel name` 'Cells' and as the `filter` 'cells.png'.
+    The plugin will then import for each folder a file containing the string 'cells.png'
+    as name this channel 'Cells'. Clicking on the file icon will automatically populate
+    these fields with a suggestion. To add a channel press `Add channel`
 5. To finalise the import, press `Import`. This will then show again the Annotator plugin,
     where you
 
-![](https://oeway.github.io/ImJoy-Plugins/image-annotator/annotator-import-local.gif)
+![](https://imjoy-team.github.io/imjoy-plugins/image-annotator/annotator-import-local.gif)
 
 ## Navigating samples and channels
 From the `File` pulldown menu: you can can choose the different sample folders.
@@ -59,7 +59,7 @@ Data is loaded into the browser each time you select a sample. This allows to wo
 with large data-sets. With the mouse, you can zoom-in and zoom-out,
 and pan (with the left button pressed).
 
-![](https://oeway.github.io/ImJoy-Plugins/image-annotator/annotator-channels.gif)
+![](https://imjoy-team.github.io/imjoy-plugins/image-annotator/annotator-channels.gif)
 
 From the `Channel` pulldown menu: you can show either each channel separately, or a composite image.
 For the latter you can change the contrast of each channel separately.
@@ -70,7 +70,7 @@ From the `Annotation` pulldown menu: you can toggle the display of the different
 define a new annotation type. To start annotating, select one of the annotation types
 and start drawing. To stop annotating, press the `Stop annotation`.
 
-![](https://oeway.github.io/ImJoy-Plugins/image-annotator/annotator-annotations.gif)
+![](https://imjoy-team.github.io/imjoy-plugins/image-annotator/annotator-annotations.gif)
 
 ## Upload and export
 Annotation are stored in the [GeoJson format](https://geojson.org/).
@@ -80,11 +80,11 @@ for further processing, or download them for local storage.
 
 For either option, you can choose between
 * `Current annotation`: the GeoJson file will be downloaded as `sample_name_annotation.json`,
-   with `sample_name` being the name of the sample.
+    with `sample_name` being the name of the sample.
 * `All annotations`: will create a identical folder structure as the uploaded one and
-   will save all annotations as `annotation.json` to their respective sample folders.
+    will save all annotations as `annotation.json` to their respective sample folders.
 * `Channels + Annotations`: will create the complete folder structure as the uploaded one (including images)
-   and save all annotations as `annotation.json` to their respective sample folders.
+    and save all annotations as `annotation.json` to their respective sample folders.
 
 </docs>
 <config lang="json">
@@ -93,7 +93,7 @@ For either option, you can choose between
     "type":"window",
     "tags":[],
     "ui":"",
-    "version":"0.5.76",
+    "version":"0.5.80",
     "api_version":"0.1.5",
     "description":"An image annotator made with OpenLayers",
     "icon":"extension",
@@ -118,15 +118,15 @@ For either option, you can choose between
         "cache:https://images.proteinatlas.org/19663/395_C4_2_blue_red_green.jpg"
     ],
     "dependencies":[
-        "oeway/ImJoy-Plugins:ImageSelection",
-        "oeway/ImJoy-Plugins:Tif File Importer"
+        "imjoy-team/imjoy-plugins:ImageSelection",
+        "imjoy-team/imjoy-plugins:Tif File Importer"
     ],
     "defaults":{
         "w": 35,
         "h": 25,
         "fullscreen": true
     },
-    "cover": "https://oeway.github.io/ImJoy-Plugins/image-annotator/annotator-cover.gif"
+    "cover": "https://imjoy-team.github.io/imjoy-plugins/image-annotator/annotator-cover.gif"
 }
 </config>
 <script lang="javascript">
@@ -275,6 +275,8 @@ async function url2base64(url) {
         img.src = url;
     });
 }
+
+
 function mkdir(dir) {
     return new Promise(async (resolve, reject) => {
         let paths = dir.split('/');
@@ -725,7 +727,7 @@ const app = new Vue({
         new_label: '',
         predict_sample: null,
         dataset_folder: 'dataset/',
-        default_engine: 'http://127.0.0.1:9527',
+        default_file_manager: 'http://127.0.0.1:9527',
         iOS: false,
         message: '',
         checkModalFlag: false,
@@ -850,7 +852,7 @@ const app = new Vue({
             this.selected_sample.data['annotation.json'] = this.selected_sample.data['annotation.json'] || {'file_name': 'annotation.json'}
             const annotation_data = this.selected_sample.data['annotation.json']
             let annotation_path  = null
-             if (this.selected_sample.group === 'test') {
+                if (this.selected_sample.group === 'test') {
                 let prediction = this.selected_sample.data['prediction.json'] || {'file_name': 'prediction.json'}
                 annotation_path = pathJoin(this.selected_dataset.root_folder, this.selected_sample.group, this.selected_sample.name, prediction.file_name)
             }
@@ -889,18 +891,20 @@ const app = new Vue({
             this.vector_source.addFeatures(features)
             this.updateFeatureStyle()
         },
-        async uploadFile(file, path, overwrite, engine) {
+        async uploadFile(file, path, overwrite, file_manager) {
             return new Promise(async (resolve, reject) => {
                 try {
-                    let config = {
-                        path: path,
-                        engine: engine || this.default_engine,
-                        overwrite: overwrite === false ? overwrite : true
-                    }
-                    let upload_url = await api.requestUploadUrl(config)
-                    const fileInfo = await api.uploadFileToUrl({file:file, url: upload_url})
-                    console.log(fileInfo.path)
-                    resolve(fileInfo)
+                    // let config = {
+                    //     path: path,
+                    //     file_manager: file_manager || this.default_file_manager,
+                    //     overwrite: overwrite === false ? overwrite : true
+                    // }
+                    const fm = await api.getFileManager(file_manager)
+                    await fm.putFile(file, path)
+                    // let upload_url = await api.requestUploadUrl(config)
+                    // const fileInfo = await api.uploadFileToUrl({file:file, url: upload_url})
+                    console.log(path)
+                    resolve(path)
                 } catch (e) {
                     reject(e)
                 }
@@ -908,12 +912,12 @@ const app = new Vue({
         },
         async checkConfigFile () {
 
-            const engine = await api.call('Anet-Lite', 'get_engine')
-            if (engine) {
-                this.default_engine = engine
+            const fm = await api.call('Anet-Lite', 'get_file_manager')
+            if (fm) {
+                this.default_file_manager = fm
             }
             else{
-                throw "cannot determin the engine"
+                throw "cannot determin the file manager"
             }
 
             // upload config.json
@@ -970,7 +974,7 @@ const app = new Vue({
                     return item
                 }
             })
-             console.log('=================2', save_list.length)
+                console.log('=================2', save_list.length)
             await this.saveAnnotation(save_list)
             this.selected_dataset.annotation_types = this.annotation_types
             await this.saveConfig()
@@ -1086,14 +1090,14 @@ const app = new Vue({
                 const file_path = pathJoin(dataset.root_folder, this.selected_sample.group, this.selected_sample.name, data.file_name)
 
                 if(await exists(file_path) && !file_path.endsWith('.base64')){
-                     console.log('reading channel image from browser (base64)', file_path)
+                        console.log('reading channel image from browser (base64)', file_path)
                     const datab = await readFile(file_path, null)
                     const blob = new Blob([new Uint8Array(datab.buffer)])
                     blob.name = data.file_name
                     return await file2img(blob)
                 }
                 else if(await exists(file_path)){
-                     console.log('reading channel image from browser', file_path)
+                        console.log('reading channel image from browser', file_path)
                     url = await readFile(file_path)
                     const img = await getMeta(url)
                     h = img.height
@@ -1290,7 +1294,7 @@ const app = new Vue({
         clearCanvas(){
             this.image_layer.setSource(null)
         },
-        async importDataset(dataset) {
+        async importDataset(dataset, overwrite) {
             try{
                 this.loading = true
                 const samples = dataset.samples
@@ -1308,21 +1312,35 @@ const app = new Vue({
                     for (let k of Object.keys(sample.data)) {
                         // only import channels or annotations/predictions
                         const channels_or_json = dataset.channel_config[k] || sample.data[k].file_name === 'annotation.json' || sample.data[k].file_name === 'annotation.json'
-                        if(channels_or_json && sample.data[k].file){
-                            let file_path = pathJoin(sample_dir, sample.data[k].file_name)
-
-                            let file = null
-                            if (sample.data[k].file && sample.data[k].file.type) {
-                                file = sample.data[k].file
-                            } else if (sample.data[k].url) {
-                                file = await fetchDataByUrl(sample.data[k].url, 'blob')
-                            } else {
-                                throw 'unsupported data type.'
+                        if(channels_or_json && sample.data[k].file_name){
+                            try{
+                                let file_path = pathJoin(sample_dir, sample.data[k].file_name)
+                                api.showStatus('Importing file to ' + file_path)
+                                if(!overwrite){
+                                    if(await exists(file_path)){
+                                        continue;
+                                    }
+                                }
+                                let file = null
+                                if (sample.data[k].file && sample.data[k].file.type) {
+                                    file = sample.data[k].file
+                                } else if (sample.data[k].url) {
+                                    
+                                    file = await fetchDataByUrl(sample.data[k].url, 'blob')
+                                } else {
+                                    throw 'unsupported data type.'
+                                }
+                            
+                                let arraybuffer = await file2arraybuffer(file)
+                                await writeFile(file_path, arraybuffer)
                             }
-                            let arraybuffer = await file2arraybuffer(file)
-                            await writeFile(file_path, arraybuffer)
+                            catch(ex){
+                                console.error(ex)
+                                debugger
+                            }
                         }
                     }
+                    api.showProgress((i+1)/samples.length);
                 }
                 await this.saveConfig(dataset)
             }
@@ -1331,6 +1349,8 @@ const app = new Vue({
                 throw e
             }
             finally{
+                api.showStatus('Dataset imported.')
+                api.showProgress(100)
                 this.loading = false
                 this.$forceUpdate()
             }
@@ -1362,8 +1382,6 @@ const app = new Vue({
                 this.setAnnotationCheckbox(true)
                 if (this.selected_annotation) this.switchDrawInteraction()
                 await this.selectSample(this.selected_samples[0])
-
-                console.log('========loaded dataset========', dataset)
             }
             catch(e){
                 console.error(e)
@@ -1392,7 +1410,7 @@ const app = new Vue({
                 const sample = dataset.samples[i]
                 const data = sample.data['annotation.json']
                 if(!data || !data.file || !data.file.size){
-                  continue
+                    continue
                 }
                 const sample_dir = pathJoin(DATASET_DIR, dataset.name, sample.group, sample.name)
                 await mkdir(sample_dir)
@@ -1760,13 +1778,13 @@ const app = new Vue({
             var file = new File([blob], "annotation.json", {
                 type: "text/plain",
             })
-            console.log('uploading to ',  targetObj.engine, targetObj.path)
-            await this.uploadFile(file, pathJoin(targetObj.path, 'annotation.json'), true, targetObj.engine)
+            console.log('uploading to ',  targetObj.file_manager, targetObj.path)
+            await this.uploadFile(file, pathJoin(targetObj.path, 'annotation.json'), true, targetObj.file_manager)
 
         },
         async uploadAllAnnotations(with_images) {
             const targetObj = await api.showFileDialog({type: 'directory', mode: 'single'})
-            console.log('uploading dataset: ', this.selected_dataset, ' to ', targetObj.engine, targetObj.path)
+            console.log('uploading dataset: ', this.selected_dataset, ' to ', targetObj.file_manager, targetObj.path)
             try{
                 await this.uploadDataset(targetObj, with_images, false)
             }
@@ -1787,12 +1805,12 @@ const app = new Vue({
                 type: "text/plain",
             })
             const targetDir = pathJoin(targetObj.path, this.selected_dataset.name)
-            await this.uploadFile(file, pathJoin(targetDir, 'config.json'), overwrite, targetObj.engine)
+            await this.uploadFile(file, pathJoin(targetDir, 'config.json'), overwrite, targetObj.file_manager)
 
-            api.showMessage('Uploading dataset: ', this.selected_dataset, ' to ', targetObj.engine, targetObj.path)
+            api.showMessage('Uploading dataset: ', this.selected_dataset, ' to ', targetObj.file_manager, targetObj.path)
             await this.walkThroughSamples(this.selected_dataset, this.selected_dataset.samples, (sample, data, file)=>{
                 if(data)
-                this.uploadFile(file, pathJoin(targetDir, sample.group, sample.name, data.file_name), overwrite, targetObj.engine)
+                this.uploadFile(file, pathJoin(targetDir, sample.group, sample.name, data.file_name), overwrite, targetObj.file_manager)
             }, with_images)
             api.showMessage('The dataset is successfully uploaded')
         },
@@ -1904,6 +1922,13 @@ const app = new Vue({
 })
 class ImJoyPlugin {
     async setup() {
+        try{
+            const bfs_plugin = await api.getPlugin("BrowserFS");
+            api.fs = bfs_plugin.fs;
+        }
+        catch(e){
+            console.error('failed to use BrowserFS', e)
+        }
         app.importSampleCompleteCallback = this.importSampleComplete
         app.getData = this.getData
         app.getDataset = this.getDataset
@@ -1961,7 +1986,7 @@ class ImJoyPlugin {
             throw "Sample not found"
         }
     }
-    async importSampleComplete(dataset, save) {
+    async importSampleComplete(dataset, save, overwrite) {
         if(app.selection_dialog){
             app.selection_dialog.close()
             app.selection_dialog = null
@@ -1971,7 +1996,7 @@ class ImJoyPlugin {
         }
         if(save){
             assert(dataset.api_version === API_VERSION, 'dataset API version mismatch')
-            await app.importDataset(dataset)
+            await app.importDataset(dataset, overwrite)
             await app.loadDataset(dataset)
         }
         else{
@@ -1981,7 +2006,7 @@ class ImJoyPlugin {
     }
 
     async loadEngineData(dataset) {
-        let root_url = await api.getFileUrl({'path': dataset.root_folder, 'engine': dataset.engine_url})
+        let root_url = await api.getFileUrl({'path': dataset.root_folder, 'file_manager': dataset.file_manager || dataset.engine_url})
         let root_items = await fetchDataByUrl(root_url)
         root_items = root_items.filter((item) => {
             return item.name && !item.name.startsWith('.') && !(item.name.startsWith('__'))
@@ -2141,7 +2166,7 @@ api.export(new ImJoyPlugin())
             <ul class="menu">
                 <li v-if="selected_annotation"  class="menu-item cursor-pointer">
                     <a href="#"  @click="stopAnnotation()">
-                       <i class="icon icon-stop"></i> Stop Annotation
+                        <i class="icon icon-stop"></i> Stop Annotation
                     </a>
                 </li>
                 <li v-if="selected_annotation"  class="menu-item cursor-pointer">
@@ -2154,7 +2179,7 @@ api.export(new ImJoyPlugin())
                 <li v-for="(an, label) in annotation_types"  style="display:flex;"
                     :style="selected_annotation && selected_annotation.label === label? 'background:#cde1fd;':''"
                         class="menu-item cursor-pointer" :key="label">
-                     <label class="form-checkbox">
+                        <label class="form-checkbox">
                         <input type="checkbox" v-model="an.checked" @change="checkboxChange(an)">
                         <i class="form-icon" :style="{backgroundColor: an.color}"></i>
                     </label>
@@ -2190,15 +2215,15 @@ api.export(new ImJoyPlugin())
                 <ul class="menu" style="width: 250px; right:0; left: unset;">
                     <li class="menu-item cursor-pointer">
                         <a href="#"  @click="uploadAnnotation()">Upload Current annotation</a></li>
-                     <li class="menu-item cursor-pointer">
+                        <li class="menu-item cursor-pointer">
                         <a href="#" @click="uploadAllAnnotations(false)">Upload Annotations</a></li>
-                     <li class="menu-item cursor-pointer">
+                        <li class="menu-item cursor-pointer">
                         <a href="#" @click="uploadAllAnnotations(true)">Upload Images&Annotations</a></li>
                     <li class="menu-item cursor-pointer">
-                       <a href="#"  @click="exportAnnotation()">Export Current annotation</a></li>
-                     <li class="menu-item cursor-pointer">
+                        <a href="#"  @click="exportAnnotation()">Export Current annotation</a></li>
+                        <li class="menu-item cursor-pointer">
                         <a href="#" @click="exportAllAnnotation(false)">Export Annotations</a></li>
-                     <li class="menu-item cursor-pointer">
+                        <li class="menu-item cursor-pointer">
                         <a href="#" @click="exportAllAnnotation(true)">Export Images&Annotations</a></li>
                 </ul>
             </div>
