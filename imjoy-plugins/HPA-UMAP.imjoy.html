@@ -20,7 +20,7 @@ a localization pattern.
     "type": "window",
     "tags": [],
     "ui": "Explore protein localization patterns in HPA images.",
-    "version": "0.3.12",
+    "version": "0.4.2",
     "api_version": "0.1.2",
     "description": "Explore protein localization patterns in HPA images.",
     "icon": "photo",
@@ -28,14 +28,14 @@ a localization pattern.
     "outputs": null,
     "requirements": [
     "https://cdn.plot.ly/plotly-latest.min.js",
-    "https://unpkg.com/papaparse@latest/papaparse.min.js",
+    "https://cdn.jsdelivr.net/npm/papaparse@5.2.0/papaparse.min.js",
     "https://cdn.jsdelivr.net/npm/vue@2.6.10/dist/vue.min.js",
     "https://unpkg.com/spectre.css/dist/spectre.min.css",
     "https://unpkg.com/spectre.css/dist/spectre-exp.min.css",
     "https://unpkg.com/spectre.css/dist/spectre-icons.min.css"],
     "dependencies": [],
     "defaults": {"w": 50, "h":20, "fullscreen": true},
-    "cover": "https://oeway.github.io/ImJoy-Plugins/hpa-umap/hpa-umap-cover.gif"
+    "cover": "https://imjoy-team.github.io/imjoy-plugins/hpa-umap/hpa-umap-cover.gif"
 }
 </config>
 
@@ -97,11 +97,68 @@ const COLORS = [
 class ImJoyPlugin {
     async setup() {
         const self = this
-        this.store = {images: [], current_index: 0, loading: true, thumbnail: null, search_text: ''}
+        this.store = {images: [], selected_table: null, current_filter: '', tables:  {
+                "2D": "https://dl.dropbox.com/s/k9ekd4ff3fyjbfk/umap_results_fit_all_transform_all_sorted_20190422.csv",
+                "3D": "https://dl.dropbox.com/s/s4m2iysupy8gwj0/umap_results_fit_all_transform_all.csv",
+            },
+            current_index: 0, loading: true, thumbnail: null, search_text: 'COVID-19'}
         this.app = new Vue({
         el: '#app',
         data: this.store,
         methods: {
+            loadTable(url){
+                this.selected_table = url;
+                if(this.tables[url]){
+                    url = this.tables[url]
+                }
+                this.loading = true;
+                Papa.parse(url, {
+                    download: true,
+                    header: true,
+                    dynamicTyping: true,
+                    skipEmptyLines: true,
+                    error: (err, file, inputElem, reason)=> {
+                        api.alert('Falied to load the table: ' + reason.toString())
+                        this.loading = false
+                        this.$forceUpdate()
+                    },
+                    complete: (results) => {
+                        for(let loc of results.data){
+                            if(loc.gene && loc.cell_line )
+                            loc.info = loc.gene + '(' + loc.cell_line + ')' + ': ' + loc.location
+                            else
+                            loc.info = loc.location
+                        }                        
+                        console.log('===============>', results)
+                        self.umap_data = results.data
+                        try{
+                            self.updateUmap(self.umap_data, this.current_filter, self.umap_data[0].z?true:false)
+                        }
+                        finally{
+                            this.loading = false
+                            this.$forceUpdate()
+                        }
+                        
+                    }
+                })
+            },
+            async exportCSV(){
+                api.showMessage("Exporting as csv. This may take some time")
+                let export_string = "ID,X,Y,Z,GENE,LOCATIONS,HPA_URL\n"
+                for (var current_index in self.filtered_table) {
+                    var current_data = self.filtered_table[current_index]
+                    export_string += current_data["id"] + ","
+                    export_string += current_data["x"] + ","
+                    export_string += current_data["y"] + ","
+                    export_string += current_data["z"] + ","
+                    export_string += current_data["gene"] + ","
+                    export_string += "\"" + current_data["location"] + "\","
+                    export_string += current_data["x"] + "," 
+                    export_string += 'https://www.proteinatlas.org/'+current_data["gene_ensembl_id"]+'-'+current_data["gene"]+'/cell/'
+                    export_string += "\n"
+                }
+                api.exportFile(export_string, 'export.csv')
+            },
             openImage(url){
                 api.utils.openUrl(url)
             },
@@ -119,8 +176,15 @@ class ImJoyPlugin {
             showThumbnail(obj){
                 this.thumbnail = obj
             },
-            search(text){
-                self.updateUmap(self.umap_data, text)
+            async search(text){
+                this.loading = true;
+                try{
+                    await self.updateUmap(self.umap_data, text, self.umap_data[0].z?true:false)
+                }
+                finally{
+                    this.loading = false;
+                }
+                
             },
             async export_image(){
                 await api.showStatus('exporting as image...')
@@ -130,6 +194,12 @@ class ImJoyPlugin {
                 url = await Plotly.toImage(self.umap_chart, {format:'svg', height:1024, width: 1024})
                 await api.exportFile(convertBase64ToFile(url), 'HPA_V18_UMAP_densenet121.svg')
                 await api.showStatus('done')
+            },
+            async selectFileChanged(event) {
+                const file = event.target.files[0];
+                if(file){
+                    this.loadTable(file, )
+                }
             }
         }
     })
@@ -197,20 +267,23 @@ class ImJoyPlugin {
         updatemenus: updatemenus
     }
     this.umap_chart = await Plotly.newPlot('chart', data, layout,{responsive: true})
-    // Plotly.relayout('chart', {
-    //     width: document.getElementById('chart').clientWidth,
-    //     height: document.getElementById('chart').clientHeight
-    // })
-    
-    // let win=null;
-    document.getElementById('chart').on('plotly_click', async (data) => {
+    window.addEventListener('resize', ()=>{
         Plotly.relayout('chart', {
             width: document.getElementById('chart').clientWidth,
             height: document.getElementById('chart').clientHeight
         })
+    });
+    
+    // let win=null;
+    document.getElementById('chart').on('plotly_click', async (data) => {
         for(var i=0; i < data.points.length; i++){
             console.log('====>', data.points[i].customdata)
             const id = data.points[i].customdata.id
+            if(!data.points[i].customdata.gene){
+                this.app.images = []
+                api.showStatus(id + ':' + data.points[i].customdata.location)
+                continue
+            }
             //pts = data.points[i].customdata.gene+'\n';
             const image_base_url = 'https://images.proteinatlas.org/' + id.split('_')[0] + '/' + id.split('_')[1] +'_' + id.split('_')[2] + '_'+ id.split('_')[3]
             this.app.showImage({url: image_base_url+'_blue.jpg', meta: data.points[i].customdata})
@@ -238,43 +311,59 @@ class ImJoyPlugin {
         }
     });
     }
+    async loadCOVIDList(){
+        return new Promise((resolve, reject)=>{
+            Papa.parse('https://gist.githubusercontent.com/oeway/33c4979ede1d8aafd5aa9a25247c7ae7/raw/COVID%2520interacting%2520protein.csv', {
+                download: true,
+                header: true,
+                dynamicTyping: true,
+                skipEmptyLines: true,
+                error: (err, file, inputElem, reason)=> {
+                    api.alert('Falied to load the table: ' + reason.toString())
+                    reject(results)
+                },
+                complete: (results) => {                    
+                    resolve(transpose(results.data).ENSG)
+                }
+            })
+        })
 
-    async generateFakeData(){
-    const Xs = [], Ys = [], Meta=[], n = 100000;
-
-    for (let i = 0; i < n; i += 1) {
-        Xs.push(gaussianRand());
-        Ys.push(gaussianRand());
-        Meta.push('index: '+i)
     }
-
-    const data = [{
-        type: "scattergl",
-        mode: "markers",
-        marker: {
-            line: {
-                width: 1,
-                color: '#404040'}
-        },
-        x: Xs,
-        y: Ys,
-        customdata: Meta
-    }]
-    return data
-    }
-    async updateUmap(table, filter){
+    async updateUmap(table, filter, remove){
     filter = (filter || '') && filter.trim()
-    const filters = filter.split(' ')
+    this.app.current_filter = filter;
     
-    table = table.filter((row)=>{
-        let ret = false
-        for(let filter of filters){
-            ret = ret || (!filter || row.gene === filter || row['gene_ensembl_id'] === filter || row['cell_line'] === filter || row['id'] === filter || row['location'].includes(filter) )
+    let filter_func
 
+    if(['COVID-19', 'covid', 'COVID', 'covid-19'].includes(filter.toLowerCase())){
+        const covidList = await this.loadCOVIDList()
+        console.log('=======covid interaction genes========>', covidList)
+        filter_func = (row)=>{
+            if(covidList.includes(row.gene_ensembl_id)){
+                return true
+            }
+            else{
+                return false
+            }
         }
-        return row.gene && ret
-    })
-    console.log('filtered: ', table)
+    }
+    else{
+        const filters = filter.split(' ')
+        filter_func = (row)=>{
+            let ret = false
+            for(let filter of filters){
+                ret = ret || (!filter || row.gene === filter || row['gene_ensembl_id'] === filter || row['cell_line'] === filter || row['id'] === filter || row['location'].includes(filter) )
+            }
+            return row.gene && ret
+        }
+    }
+
+    if(remove){
+        table = table.filter(filter_func)
+    }
+    
+    this.filtered_table = table;
+    console.log('filtered: ', this.filtered_table)
     
     if(table.length<=0){
         await api.alert('No image found.')
@@ -290,16 +379,16 @@ class ImJoyPlugin {
     }
     
     const data = [{
-        type: "scattergl",
+        type: dataObj.z?"scatter3d":"scattergl",
         mode: "markers",
         marker: {
-            size: 6,
-            color: dataObj.location_code.map((index)=>{
-                if(typeof index === 'string'){
-                    return '#e0e0e0d5'
+            size: dataObj.z?3:5,
+            color: dataObj.location_code.map((code, index)=>{
+                if(typeof code === 'string' || (!remove && !filter_func(table[index]))){
+                    return '#e0e0e030'
                 }
                 else{
-                    return color_map[index]
+                    return color_map[code]
                 }
             })
             //colorscale: 'Viridis'
@@ -307,34 +396,13 @@ class ImJoyPlugin {
         text: dataObj.info,
         x: dataObj.x,
         y: dataObj.y,
+        z: dataObj.z,
         customdata: table
     }]
     this.plot(data)
     }
     async run(my) {
-    const url = "https://dl.dropbox.com/s/k9ekd4ff3fyjbfk/umap_results_fit_all_transform_all_sorted_20190422.csv"
-    Papa.parse(url, {
-        download: true,
-        header: true,
-        dynamicTyping: true,
-        skipEmptyLines: true,
-        error: (err, file, inputElem, reason)=> {
-            api.alert('Falied to load the table: ' + reason.toString())
-            this.app.loading = false
-            this.app.$forceUpdate()
-        },
-        complete: (results) => {
-            for(let loc of results.data){
-                loc.info = loc.gene + '(' + loc.cell_line + ')' + ': ' + loc.location
-            }
-            this.app.loading = false
-            this.app.$forceUpdate()
-            console.log('===============>', results)
-            this.umap_data = results.data
-            this.updateUmap(this.umap_data)
-        }
-    })
-    
+         await this.app.loadTable('2D')
     }
 }
 
@@ -344,9 +412,37 @@ api.export(new ImJoyPlugin())
 <window lang="html">
     <div id="app">
         <header class="navbar">
+        <input id="file" style="display:none;" type="file" webkitdirectory mozdirectory msdirectory odirectory
+                directory multiple @change="selectFileChanged" />
         <section class="navbar-section">
             <a class="navbar-brand mr-2">HPA UMAP Explorer</a>
-            <button @click="export_image()" class="btn btn-link">Export</button>
+            <div class="btn-group btn-group-block">
+                <button @click="loadTable('2D')" class="btn" :class="{'btn-primary': selected_table==='2D'}">2D</button>
+                <button @click="loadTable('3D')" class="btn" :class="{'btn-primary': selected_table==='3D'}">3D</button>
+            </div> 
+            <div class="dropdown hide-sm">
+                <a href="#" class="btn btn-link dropdown-toggle" tabindex="0">
+                    <i class="fas fa-folder-plus icon-size-position"></i>
+                    <label class="hide-sm">Load Data</label>  <i class="icon icon-caret hide-sm"></i>
+                </a>
+                <ul class="menu">
+                    <li v-for="url, name in tables" :key="name">
+                        <a href="#" @click="loadTable(url)"  class="btn btn-link">
+                            Load {{name}}
+                        </a>
+                    </li>
+                    <!-- <li>
+                        <a href="#" @click="exportCSV()" class="btn btn-link">Export CSV</a>
+                    </li> -->
+                    <li>
+                        <a href="#" onclick="document.getElementById('file').click()"  class="btn btn-link">
+                                Load from file
+                        </a>
+                    </li>
+                </ul>
+            </div>
+            <button @click="export_image()" class="btn btn-link hide-sm">Download</button>
+            
         </section>
         <section class="navbar-section">
             <div class="input-group input-inline">
