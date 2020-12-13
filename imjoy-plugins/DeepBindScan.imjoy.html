@@ -17,8 +17,8 @@ the prediction will then take several minutes.
 {
     "name": "DeepBindScan",
     "type": "native-python",
-    "version": "0.2.15",
-    "api_version": "0.1.3",
+    "version": "0.3.0",
+    "api_version": "0.1.7",
     "description": "Predict binding affinity of TF/RBP to a given DNA/RNA sequence.",
     "tags": [],
     "ui": "",
@@ -28,12 +28,13 @@ the prediction will then take several minutes.
     "icon": "extension",
     "env": "conda create -n deepbindscan python=3.6.8",
     "requirements": ["conda: h5py bioconda::pybedtools bioconda::pyfaidx numpy pandas", "pip: -U tensorflow==1.15.0 keras==2.1.6 kipoi kipoiseq"],
-    "dependencies": ["imjoy-team/example-plugins:SchemaIO"],
+    "dependencies": ["oeway/ImJoy-Plugins:SchemaIO"],
     "cmd": "KERAS_BACKEND=tensorflow python"
 }
 </config>
 
 <script lang="python">
+from imjoy import api
 import kipoi
 from kipoiseq.transforms import SwapAxes, DummyAxis, Compose, OneHot, ReorderedOneHot
 import numpy as np
